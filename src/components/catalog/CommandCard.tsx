@@ -1,9 +1,37 @@
 "use client";
 
 import Link from "next/link";
-import { Download, Shield, ShieldCheck } from "lucide-react";
+import { Download, Package, Shield, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { CommandSummary } from "@/api/pantry";
+import type { CommandSummary, PackageComponent } from "@/api/pantry";
+
+const COMPONENT_TYPE_LABELS: Record<string, string> = {
+  command: "Command",
+  agent: "Agent",
+  device_protocol: "Protocol",
+  device_manager: "Manager",
+};
+
+function ComponentBadges({ components }: { components: PackageComponent[] }) {
+  if (!components || components.length <= 1) return null;
+
+  const counts: Record<string, number> = {};
+  for (const c of components) {
+    const label = COMPONENT_TYPE_LABELS[c.type] || c.type;
+    counts[label] = (counts[label] || 0) + 1;
+  }
+
+  const parts = Object.entries(counts).map(
+    ([label, count]) => `${count} ${label}${count > 1 ? "s" : ""}`
+  );
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+      <Package className="h-3 w-3" />
+      {parts.join(" + ")}
+    </span>
+  );
+}
 
 function DangerBadge({ rating }: { rating: number | null }) {
   if (rating === null) return null;
@@ -55,6 +83,12 @@ export function CommandCard({ command }: { command: CommandSummary }) {
       <p className="mt-2 line-clamp-2 flex-1 text-sm text-[var(--color-text-muted)]">
         {command.description}
       </p>
+
+      {command.package_type === "bundle" && (
+        <div className="mt-2">
+          <ComponentBadges components={command.components} />
+        </div>
+      )}
 
       <div className="mt-4 flex items-center justify-between text-xs text-[var(--color-text-muted)]">
         <div className="flex items-center gap-3">

@@ -9,6 +9,13 @@ export const pantryApi = axios.create({
 
 // ── Types ──────────────────────────────────────────────────────────────
 
+export interface PackageComponent {
+  type: "command" | "agent" | "device_protocol" | "device_manager";
+  name: string;
+  path?: string;
+  description?: string;
+}
+
 export interface CommandSummary {
   command_name: string;
   display_name: string;
@@ -20,6 +27,8 @@ export interface CommandSummary {
   danger_rating: number | null;
   verified: boolean;
   icon_url: string | null;
+  package_type: string;
+  components: PackageComponent[];
 }
 
 export interface CommandAuthor {
@@ -32,6 +41,8 @@ export interface CommandDetail extends Omit<CommandSummary, "author"> {
   github_repo_url: string;
   platforms: string[];
   license: string;
+  package_type: string;
+  components: PackageComponent[];
   created_at: string | null;
   updated_at: string | null;
   security_report: SecurityReport | null;
@@ -76,6 +87,48 @@ export interface CommandsResponse {
   per_page: number;
 }
 
+export interface AuthUser {
+  github_id: number;
+  github_username: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+// ── Auth functions ────────────────────────────────────────────────────
+
+export async function getGitHubAuthUrl(
+  redirectUri: string
+): Promise<{ url: string }> {
+  const { data } = await pantryApi.get("/v1/auth/github", {
+    params: { redirect_uri: redirectUri },
+  });
+  return data;
+}
+
+export async function exchangeGitHubCode(
+  code: string
+): Promise<{ access_token: string; user: AuthUser }> {
+  const { data } = await pantryApi.post("/v1/auth/github/callback", { code });
+  return data;
+}
+
+export async function getCurrentUser(token: string): Promise<AuthUser> {
+  const { data } = await pantryApi.get("/v1/auth/me", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+}
+
+export async function deleteCommand(
+  name: string,
+  token: string
+): Promise<{ status: string; command_name: string }> {
+  const { data } = await pantryApi.delete(`/v1/commands/${name}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+}
+
 // ── API functions ──────────────────────────────────────────────────────
 
 export async function searchCommands(params: {
@@ -113,18 +166,78 @@ export async function getCategories(): Promise<Category[]> {
   return data.categories;
 }
 
-export interface QuickSubmitResult {
-  status: string;
-  command_name: string;
-  display_name: string;
-  version: string;
-  description: string;
+export interface CostEstimate {
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number;
+  formatted: string;
 }
 
-export async function quickSubmit(params: {
-  repo_url: string;
-  author_github?: string;
-}): Promise<QuickSubmitResult> {
-  const { data } = await pantryApi.post("/v1/commands/quick-submit", params);
+export interface QuickSubmitResult {
+  submission_id: number;
+  status: string;
+  command_name: string;
+  version: string;
+  static_analysis: {
+    passed: boolean;
+    warnings: string[];
+    errors: string[];
+    dangerous_patterns: string[];
+    checks_passed: number;
+  };
+  cost_estimate: CostEstimate | null;
+}
+
+export interface SubmissionStage {
+  status: string;
+  checks_passed?: number;
+  warnings?: string[];
+  dangerous_patterns?: string[];
+  provider?: string;
+  pass_count?: number;
+  fail_count?: number;
+  test_count?: number;
+  errors?: string[];
+}
+
+export interface SubmissionStatus {
+  submission_id: number;
+  status: string;
+  command_name: string | null;
+  stages: {
+    queue: SubmissionStage;
+    static_analysis: SubmissionStage;
+    ai_review: SubmissionStage;
+    container_test: SubmissionStage;
+  };
+  result: {
+    command_name?: string;
+    display_name?: string;
+    version?: string;
+    reason?: string;
+  } | null;
+}
+
+export async function quickSubmit(
+  params: {
+    repo_url: string;
+    llm_provider?: string;
+    llm_api_key?: string;
+    confirm?: boolean;
+  },
+  token: string
+): Promise<QuickSubmitResult> {
+  const { data } = await pantryApi.post("/v1/commands/quick-submit", params, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data;
+}
+
+export async function getSubmissionStatus(
+  submissionId: number
+): Promise<SubmissionStatus> {
+  const { data } = await pantryApi.get(
+    `/v1/submissions/${submissionId}/status`
+  );
   return data;
 }

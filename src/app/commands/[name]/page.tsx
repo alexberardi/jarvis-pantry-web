@@ -1,18 +1,28 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  Bot,
+  Cpu,
   Download,
-  ShieldCheck,
-  Shield,
   ExternalLink,
+  Package,
+  RefreshCw,
+  Shield,
+  ShieldCheck,
   Star,
   Clock,
   Tag,
+  Terminal,
+  Trash2,
+  Wifi,
 } from "lucide-react";
 import { useCommand, useVersions, useReviews } from "@/hooks/useCommands";
+import { useAuthContext } from "@/hooks/AuthContext";
+import { deleteCommand } from "@/api/pantry";
 import { cn } from "@/lib/utils";
 
 export default function CommandDetailPage({
@@ -21,9 +31,30 @@ export default function CommandDetailPage({
   params: Promise<{ name: string }>;
 }) {
   const { name } = use(params);
+  const router = useRouter();
+  const { user, token } = useAuthContext();
   const { data: command, isLoading, isError } = useCommand(name);
   const { data: versionsData } = useVersions(name);
   const { data: reviewsData } = useReviews(name);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const isOwner =
+    user &&
+    command?.author &&
+    user.github_username === command.author.github;
+
+  async function handleDelete() {
+    if (!token) return;
+    setDeleting(true);
+    try {
+      await deleteCommand(name, token);
+      router.push("/");
+    } catch {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -88,13 +119,59 @@ export default function CommandDetailPage({
           </p>
         </div>
 
-        {/* Install CTA */}
-        <div className="text-right">
+        {/* Install CTA + management */}
+        <div className="flex flex-col items-end gap-2">
           <code className="block rounded bg-[var(--color-surface-alt)] px-3 py-2 text-sm text-[var(--color-text)]">
             jarvis pantry install {command.command_name}
           </code>
+          {isOwner && (
+            <div className="flex gap-2">
+              <Link
+                href={`/submit?update=${command.command_name}&repo=${encodeURIComponent(command.github_repo_url)}`}
+                className="flex items-center gap-1 rounded border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Update
+              </Link>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-1 rounded border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Delete confirmation */}
+      {showDeleteConfirm && (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+          <p className="text-sm font-medium text-red-800 dark:text-red-300">
+            Are you sure you want to delete {command.display_name || command.command_name}?
+          </p>
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+            This will permanently remove the command, all versions, reviews, and security reports.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={deleting}
+              className="rounded border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text)]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {deleting ? "Deleting..." : "Delete permanently"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Description */}
       <p className="mt-6 text-[var(--color-text)]">{command.description}</p>
@@ -146,6 +223,54 @@ export default function CommandDetailPage({
           <ExternalLink className="h-4 w-4" />
           View on GitHub
         </a>
+      )}
+
+      {/* Components (bundles) */}
+      {command.package_type === "bundle" && command.components?.length > 0 && (
+        <div className="mt-8 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-[var(--color-text)]">
+            <Package className="h-5 w-5" />
+            Components
+          </h2>
+          <div className="mt-3 space-y-2">
+            {command.components.map((comp) => {
+              const icons: Record<string, typeof Terminal> = {
+                command: Terminal,
+                agent: Bot,
+                device_protocol: Wifi,
+                device_manager: Cpu,
+              };
+              const Icon = icons[comp.type] || Terminal;
+              const labels: Record<string, string> = {
+                command: "Command",
+                agent: "Agent",
+                device_protocol: "Device Protocol",
+                device_manager: "Device Manager",
+              };
+              return (
+                <div
+                  key={comp.name}
+                  className="flex items-center gap-3 rounded border border-[var(--color-border)] bg-[var(--color-surface-alt)] px-4 py-2.5"
+                >
+                  <Icon className="h-4 w-4 text-[var(--color-primary)]" />
+                  <div>
+                    <span className="font-medium text-[var(--color-text)]">
+                      {comp.name}
+                    </span>
+                    <span className="ml-2 rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-xs text-[var(--color-text-muted)]">
+                      {labels[comp.type] || comp.type}
+                    </span>
+                    {comp.description && (
+                      <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                        {comp.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Security report */}
