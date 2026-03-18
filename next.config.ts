@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   async rewrites() {
-    const pantryUrl = process.env.PANTRY_API_URL || "http://localhost:7720";
+    const pantryUrl = process.env.PANTRY_API_URL || "http://localhost:7721";
     return [
       {
         source: "/v1/:path*",

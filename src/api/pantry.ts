@@ -112,3 +112,19 @@ export async function getCategories(): Promise<Category[]> {
   const { data } = await pantryApi.get("/v1/categories");
   return data.categories;
 }
+
+export interface QuickSubmitResult {
+  status: string;
+  command_name: string;
+  display_name: string;
+  version: string;
+  description: string;
+}
+
+export async function quickSubmit(params: {
+  repo_url: string;
+  author_github?: string;
+}): Promise<QuickSubmitResult> {
+  const { data } = await pantryApi.post("/v1/commands/quick-submit", params);
+  return data;
+}
