@@ -241,3 +241,70 @@ export async function getSubmissionStatus(
   );
   return data;
 }
+
+// ── Forge types & functions ───────────────────────────────────────────
+
+export interface ForgeFile {
+  filename: string;
+  content: string;
+  language: string;
+}
+
+export interface ForgeValidation {
+  passed: boolean;
+  errors: string[];
+  warnings: string[];
+  dangerous_patterns: string[];
+}
+
+export interface ForgeResult {
+  package_name: string;
+  display_name: string;
+  explanation: string;
+  files: ForgeFile[];
+  validation?: ForgeValidation;
+}
+
+export interface CreateRepoResult {
+  repo_url: string;
+  repo_name: string;
+}
+
+export async function forgeCreateRepo(params: {
+  package_name: string;
+  files: { filename: string; content: string }[];
+  github_token: string;
+}): Promise<CreateRepoResult> {
+  const directUrl = process.env.NEXT_PUBLIC_PANTRY_API_URL || "http://localhost:7721";
+  const { data } = await axios.post(`${directUrl}/v1/forge/create-repo`, params, {
+    timeout: 30000,
+  });
+  return data;
+}
+
+export interface ForgeModel {
+  id: string;
+  display_name: string;
+  provider: string;
+  estimated_cost: string;
+  estimated_cost_usd: number;
+}
+
+export async function getForgeModels(): Promise<ForgeModel[]> {
+  const { data } = await pantryApi.get("/v1/forge/models");
+  return data.models;
+}
+
+export async function forgeGenerate(params: {
+  description: string;
+  model: string;
+  llm_api_key: string;
+  conversation_history?: { role: string; content: string }[];
+}): Promise<ForgeResult> {
+  // Call Pantry backend directly — Next.js rewrite proxy can 500 on long POST requests
+  const directUrl = process.env.NEXT_PUBLIC_PANTRY_API_URL || "http://localhost:7721";
+  const { data } = await axios.post(`${directUrl}/v1/forge/generate`, params, {
+    timeout: 120000,
+  });
+  return data;
+}
