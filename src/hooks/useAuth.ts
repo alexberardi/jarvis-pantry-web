@@ -11,27 +11,32 @@ import {
 const TOKEN_KEY = "pantry_github_token";
 const USER_KEY = "pantry_github_user";
 
-export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+function getStoredToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(TOKEN_KEY);
+}
 
-  // Restore from localStorage on mount
-  useEffect(() => {
-    const savedToken = localStorage.getItem(TOKEN_KEY);
-    const savedUser = localStorage.getItem(USER_KEY);
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch {
-        // Corrupted — clear
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-      }
-    }
-    setLoading(false);
-  }, []);
+function getStoredUser(): AuthUser | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    localStorage.removeItem(USER_KEY);
+    return null;
+  }
+}
+
+export function useAuth() {
+  // Initialize from localStorage synchronously (no effect needed)
+  const [user, setUser] = useState<AuthUser | null>(getStoredUser);
+  const [token, setToken] = useState<string | null>(getStoredToken);
+  // Check if we're in an OAuth callback on initial render
+  const [loading] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !!new URLSearchParams(window.location.search).get("code") && !getStoredToken();
+  });
 
   // Handle OAuth callback (code in URL)
   useEffect(() => {
@@ -39,19 +44,24 @@ export function useAuth() {
     const code = params.get("code");
     if (!code || token) return;
 
-    (async () => {
-      try {
-        const result = await exchangeGitHubCode(code);
+    let cancelled = false;
+
+    exchangeGitHubCode(code)
+      .then((result) => {
+        if (cancelled) return;
         localStorage.setItem(TOKEN_KEY, result.access_token);
         localStorage.setItem(USER_KEY, JSON.stringify(result.user));
         setToken(result.access_token);
         setUser(result.user);
-        // Clean up URL
         window.history.replaceState({}, "", window.location.pathname);
-      } catch {
+      })
+      .catch(() => {
         console.error("GitHub OAuth callback failed");
-      }
-    })();
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   const login = useCallback(async () => {
@@ -74,9 +84,9 @@ export function useAuth() {
   const validate = useCallback(async () => {
     if (!token) return false;
     try {
-      const user = await getCurrentUser(token);
-      setUser(user);
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      const u = await getCurrentUser(token);
+      setUser(u);
+      localStorage.setItem(USER_KEY, JSON.stringify(u));
       return true;
     } catch {
       logout();

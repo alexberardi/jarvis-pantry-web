@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import type { Extension } from "@codemirror/state";
 import {
   Sparkles,
   Send,
@@ -547,9 +548,10 @@ function FileEditor({
   onEdit: (filename: string, content: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- CodeMirror types are complex and dynamic-imported
   const [CodeMirrorEditor, setCodeMirrorEditor] = useState<React.ComponentType<any> | null>(null);
-  const [langExtension, setLangExtension] = useState<any>(null);
-  const [themes, setThemes] = useState<{ light: any; dark: any } | null>(null);
+  const [langExtension, setLangExtension] = useState<Extension | null>(null);
+  const [themes, setThemes] = useState<{ light: Extension; dark: Extension } | null>(null);
 
   // Dynamically load CodeMirror (client-only, avoids SSR issues)
   useEffect(() => {
@@ -563,8 +565,7 @@ function FileEditor({
       setCodeMirrorEditor(() => cm.default);
       setThemes({ light: githubTheme.githubLight, dark: githubTheme.githubDark });
 
-      // Map language to extension
-      const langMap: Record<string, any> = {
+      const langMap: Record<string, Extension> = {
         python: python.python(),
         yaml: yaml.yaml(),
         markdown: markdown.markdown(),

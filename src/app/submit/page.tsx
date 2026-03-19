@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle,
@@ -36,13 +36,7 @@ function SubmitPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, token, loading: authLoading, login } = useAuthContext();
-  const [repoUrl, setRepoUrl] = useState("");
-
-  // Pre-fill repo URL from query params (e.g., from Forge)
-  useEffect(() => {
-    const url = searchParams.get("repo_url");
-    if (url) setRepoUrl(url);
-  }, [searchParams]);
+  const [repoUrl, setRepoUrl] = useState(() => searchParams.get("repo_url") || "");
   const [llmProvider, setLlmProvider] = useState<"claude" | "openai">("claude");
   const [llmApiKey, setLlmApiKey] = useState("");
   const [state, setState] = useState<SubmitState>("idle");
