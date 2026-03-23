@@ -308,3 +308,24 @@ export async function forgeGenerate(params: {
   });
   return data;
 }
+
+
+// =============================================================================
+// Forge Drafts (share codes for test installs)
+// =============================================================================
+
+export interface ForgeDraftResponse {
+  share_code: string;
+  session_id: string;
+  expires_at: string;
+}
+
+export async function forgeUpsertDraft(params: {
+  session_id: string;
+  package_name: string;
+  display_name?: string;
+  files: { filename: string; content: string; language: string }[];
+}): Promise<ForgeDraftResponse> {
+  const { data } = await pantryApi.post("/v1/forge/drafts", params);
+  return data;
+}

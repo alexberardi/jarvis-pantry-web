@@ -15,13 +15,39 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { forgeGenerate, forgeCreateRepo, getForgeModels, type ForgeFile, type ForgeResult, type ForgeModel, type ForgeValidation } from "@/api/pantry";
+import { forgeGenerate, forgeCreateRepo, forgeUpsertDraft, getForgeModels, type ForgeFile, type ForgeResult, type ForgeModel, type ForgeValidation } from "@/api/pantry";
 import { useAuthContext } from "@/hooks/AuthContext";
 import { cn } from "@/lib/utils";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+}
+
+function ShareCodeTimer({ expiresAt }: { expiresAt: string }) {
+  const [remaining, setRemaining] = useState("");
+
+  useEffect(() => {
+    const update = () => {
+      const diff = new Date(expiresAt).getTime() - Date.now();
+      if (diff <= 0) {
+        setRemaining("expired");
+        return;
+      }
+      const mins = Math.floor(diff / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      setRemaining(`${mins}:${String(secs).padStart(2, "0")}`);
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+
+  return (
+    <span className="text-[10px] text-[var(--color-text-muted)] tabular-nums">
+      {remaining}
+    </span>
+  );
 }
 
 export default function ForgePage() {
@@ -51,6 +77,10 @@ export default function ForgePage() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState("");
   const [validation, setValidation] = useState<ForgeValidation | null>(null);
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const [shareCode, setShareCode] = useState<string | null>(null);
+  const [shareCodeExpiry, setShareCodeExpiry] = useState<string | null>(null);
+  const [shareCodeCopied, setShareCodeCopied] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -126,6 +156,25 @@ export default function ForgePage() {
       });
 
       setValidation(result.validation || null);
+
+      // Create/update draft for share code (non-blocking)
+      if (result.files.length > 0) {
+        forgeUpsertDraft({
+          session_id: sessionId,
+          package_name: result.package_name,
+          display_name: result.display_name,
+          files: result.files.map((f) => ({
+            filename: f.filename,
+            content: f.content,
+            language: f.language,
+          })),
+        })
+          .then((draft) => {
+            setShareCode(draft.share_code);
+            setShareCodeExpiry(draft.expires_at);
+          })
+          .catch((err) => console.error("Draft upsert failed:", err));
+      }
     } catch (err: unknown) {
       console.error("Forge error:", err);
       let errorText = "Generation failed — an unexpected error occurred.";
@@ -442,6 +491,32 @@ export default function ForgePage() {
             })}
             {packageInfo && (
               <div className="ml-auto flex items-center gap-2 px-4">
+                {shareCode && (
+                  <div className="flex items-center gap-1.5 mr-3">
+                    <span className="text-[10px] text-[var(--color-text-muted)]">Test:</span>
+                    <code className="rounded bg-[var(--color-surface-alt)] px-2 py-0.5 text-sm font-mono font-bold tracking-widest">
+                      {shareCode}
+                    </code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(shareCode);
+                        setShareCodeCopied(true);
+                        setTimeout(() => setShareCodeCopied(false), 2000);
+                      }}
+                      className="p-0.5 rounded hover:bg-[var(--color-surface-alt)] transition-colors"
+                      title="Copy share code"
+                    >
+                      {shareCodeCopied ? (
+                        <Check className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <Copy className="h-3 w-3 text-[var(--color-text-muted)]" />
+                      )}
+                    </button>
+                    {shareCodeExpiry && (
+                      <ShareCodeTimer expiresAt={shareCodeExpiry} />
+                    )}
+                  </div>
+                )}
                 <span className="text-xs font-medium text-[var(--color-text)]">
                   {packageInfo.displayName}
                 </span>
