@@ -1,0 +1,27 @@
+services:
+  jarvis-pantry-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: jarvis-pantry-web
+    ports:
+      - "7720:7720"
+    environment:
+      - PANTRY_API_URL=http://host.docker.internal:7721
+      - NEXT_PUBLIC_PANTRY_API_URL=http://localhost:7721
+      - PORT=7720
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./next.config.ts:/app/next.config.ts
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./postcss.config.mjs:/app/postcss.config.mjs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - jarvis-net
+    restart: unless-stopped
+
+networks:
+  jarvis-net:
+    external: true
