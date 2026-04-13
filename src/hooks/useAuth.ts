@@ -29,17 +29,28 @@ function getStoredUser(): AuthUser | null {
 }
 
 export function useAuth() {
-  // Initialize from localStorage synchronously (no effect needed)
-  const [user, setUser] = useState<AuthUser | null>(getStoredUser);
-  const [token, setToken] = useState<string | null>(getStoredToken);
-  // Check if we're in an OAuth callback on initial render
-  const [loading] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return !!new URLSearchParams(window.location.search).get("code") && !getStoredToken();
-  });
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Hydrate from localStorage after mount (avoids SSR mismatch)
+  useEffect(() => {
+    const storedToken = getStoredToken();
+    const storedUser = getStoredUser();
+    if (storedToken) setToken(storedToken);
+    if (storedUser) setUser(storedUser);
+
+    // Check if we're in an OAuth callback
+    const code = new URLSearchParams(window.location.search).get("code");
+    if (code && !storedToken) setLoading(true);
+
+    setHydrated(true);
+  }, []);
 
   // Handle OAuth callback (code in URL)
   useEffect(() => {
+    if (!hydrated) return;
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (!code || token) return;
@@ -53,16 +64,18 @@ export function useAuth() {
         localStorage.setItem(USER_KEY, JSON.stringify(result.user));
         setToken(result.access_token);
         setUser(result.user);
+        setLoading(false);
         window.history.replaceState({}, "", window.location.pathname);
       })
       .catch(() => {
         console.error("GitHub OAuth callback failed");
+        setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [hydrated, token]);
 
   const login = useCallback(async () => {
     try {
