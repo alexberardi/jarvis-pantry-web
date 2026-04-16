@@ -29,28 +29,16 @@ function getStoredUser(): AuthUser | null {
 }
 
 export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  // Hydrate from localStorage after mount (avoids SSR mismatch)
-  useEffect(() => {
-    const storedToken = getStoredToken();
-    const storedUser = getStoredUser();
-    if (storedToken) setToken(storedToken);
-    if (storedUser) setUser(storedUser);
-
-    // Check if we're in an OAuth callback
+  const [user, setUser] = useState<AuthUser | null>(() => getStoredUser());
+  const [token, setToken] = useState<string | null>(() => getStoredToken());
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === "undefined") return false;
     const code = new URLSearchParams(window.location.search).get("code");
-    if (code && !storedToken) setLoading(true);
-
-    setHydrated(true);
-  }, []);
+    return !!code && !getStoredToken();
+  });
 
   // Handle OAuth callback (code in URL)
   useEffect(() => {
-    if (!hydrated) return;
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (!code || token) return;
@@ -75,7 +63,7 @@ export function useAuth() {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, token]);
+  }, [token]);
 
   const login = useCallback(async () => {
     try {
