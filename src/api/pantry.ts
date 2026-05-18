@@ -173,6 +173,20 @@ export interface CostEstimate {
   formatted: string;
 }
 
+// Structured rejection finding — per roadmap#18. Replaces the prior
+// flat-string `errors` / `warnings` / `dangerous_patterns` lists.
+export interface Finding {
+  reason_code: string;
+  severity: "error" | "warning";
+  file?: string;
+  line?: number;
+  snippet?: string;
+  doc_url: string;
+  primitive?: string;
+  value?: string;
+  message?: string;
+}
+
 export interface QuickSubmitResult {
   submission_id: number;
   status: string;
@@ -180,9 +194,10 @@ export interface QuickSubmitResult {
   version: string;
   static_analysis: {
     passed: boolean;
-    warnings: string[];
-    errors: string[];
-    dangerous_patterns: string[];
+    findings: Finding[];
+    warnings: Finding[];
+    reason_codes?: string[];
+    message?: string;
     checks_passed: number;
   };
   cost_estimate: CostEstimate | null;
@@ -191,13 +206,14 @@ export interface QuickSubmitResult {
 export interface SubmissionStage {
   status: string;
   checks_passed?: number;
-  warnings?: string[];
-  dangerous_patterns?: string[];
+  findings?: Finding[];
+  warnings?: Finding[];
+  reason_codes?: string[];
+  message?: string;
   provider?: string;
   pass_count?: number;
   fail_count?: number;
   test_count?: number;
-  errors?: string[];
 }
 
 export interface SubmissionStatus {
@@ -252,9 +268,10 @@ export interface ForgeFile {
 
 export interface ForgeValidation {
   passed: boolean;
-  errors: string[];
-  warnings: string[];
-  dangerous_patterns: string[];
+  findings: Finding[];
+  warnings: Finding[];
+  reason_codes?: string[];
+  message?: string;
 }
 
 export interface ForgeResult {
