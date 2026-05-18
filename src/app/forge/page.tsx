@@ -17,6 +17,7 @@ import {
 import { useRouter } from "next/navigation";
 import { forgeGenerate, forgeCreateRepo, forgeUpsertDraft, getForgeModels, type ForgeFile, type ForgeResult, type ForgeModel, type ForgeValidation } from "@/api/pantry";
 import { useAuthContext } from "@/hooks/AuthContext";
+import { FindingCard } from "@/components/FindingCard";
 import { cn } from "@/lib/utils";
 
 interface Message {
@@ -565,29 +566,26 @@ export default function ForgePage() {
               <p className="text-xs font-medium text-red-800 dark:text-red-300">
                 Validation failed — fix these before publishing:
               </p>
-              <ul className="mt-1 list-disc pl-4 text-xs text-red-700 dark:text-red-400">
-                {validation.errors.map((e, i) => (
-                  <li key={i}>{e}</li>
+              <div className="mt-1.5 space-y-2">
+                {validation.findings.map((f, i) => (
+                  <FindingCard key={i} finding={f} />
                 ))}
-              </ul>
+              </div>
             </div>
           )}
-          {validation && validation.passed && (validation.warnings.length > 0 || validation.dangerous_patterns.length > 0) && (
+          {validation && validation.passed && validation.warnings.length > 0 && (
             <div className="border-b border-yellow-200 bg-yellow-50 px-4 py-2 dark:border-yellow-800 dark:bg-yellow-900/20">
               <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300">
                 Validation passed with warnings:
               </p>
-              <ul className="mt-1 list-disc pl-4 text-xs text-yellow-700 dark:text-yellow-400">
+              <div className="mt-1.5 space-y-2">
                 {validation.warnings.map((w, i) => (
-                  <li key={i}>{w}</li>
+                  <FindingCard key={i} finding={w} />
                 ))}
-                {validation.dangerous_patterns.map((d, i) => (
-                  <li key={`d-${i}`}>{d}</li>
-                ))}
-              </ul>
+              </div>
             </div>
           )}
-          {validation && validation.passed && validation.warnings.length === 0 && validation.dangerous_patterns.length === 0 && (
+          {validation && validation.passed && validation.warnings.length === 0 && (
             <div className="border-b border-green-200 bg-green-50 px-4 py-1.5 text-xs text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400">
               All checks passed
             </div>

@@ -20,6 +20,7 @@ import {
 import { useSubmission } from "@/hooks/useSubmission";
 import { useAuthContext } from "@/hooks/AuthContext";
 import { RepoPicker } from "@/components/RepoPicker";
+import { FindingCard } from "@/components/FindingCard";
 import { cn } from "@/lib/utils";
 
 type SubmitState = "idle" | "submitting" | "preview" | "confirming" | "pipeline" | "error";
@@ -297,16 +298,15 @@ function SubmitPageInner() {
                 {preview.static_analysis.warnings.length > 0 &&
                   `, ${preview.static_analysis.warnings.length} warning(s)`}
               </p>
-              {preview.static_analysis.dangerous_patterns.length > 0 && (
-                <div className="mt-2 rounded border border-yellow-200 bg-yellow-50 p-3 text-xs dark:border-yellow-800 dark:bg-yellow-900/20">
-                  <p className="font-medium text-yellow-800 dark:text-yellow-300">
-                    Flagged patterns:
-                  </p>
-                  <ul className="mt-1 list-disc pl-4 text-yellow-700 dark:text-yellow-400">
-                    {preview.static_analysis.dangerous_patterns.map((p, i) => (
-                      <li key={i}>{p}</li>
-                    ))}
-                  </ul>
+              {(preview.static_analysis.findings.length > 0 ||
+                preview.static_analysis.warnings.length > 0) && (
+                <div className="mt-2 space-y-2">
+                  {preview.static_analysis.findings.map((f, i) => (
+                    <FindingCard key={`f-${i}`} finding={f} />
+                  ))}
+                  {preview.static_analysis.warnings.map((w, i) => (
+                    <FindingCard key={`w-${i}`} finding={w} />
+                  ))}
                 </div>
               )}
             </div>
