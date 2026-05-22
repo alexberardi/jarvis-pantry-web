@@ -625,6 +625,16 @@ function FileEditor({
   const [CodeMirrorEditor, setCodeMirrorEditor] = useState<React.ComponentType<any> | null>(null);
   const [langExtension, setLangExtension] = useState<Extension | null>(null);
   const [themes, setThemes] = useState<{ light: Extension; dark: Extension } | null>(null);
+  // Resolved on mount to keep SSR and first client render in agreement.
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    setIsDark(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   // Dynamically load CodeMirror (client-only, avoids SSR issues)
   useEffect(() => {
@@ -652,8 +662,6 @@ function FileEditor({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
-
-  const isDark = typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
 
   return (
     <div className="relative flex-1 flex flex-col overflow-hidden">

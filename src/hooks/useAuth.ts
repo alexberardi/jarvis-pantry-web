@@ -29,22 +29,27 @@ function getStoredUser(): AuthUser | null {
 }
 
 export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(() => getStoredUser());
-  const [token, setToken] = useState<string | null>(() => getStoredToken());
-  const [loading, setLoading] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const code = new URLSearchParams(window.location.search).get("code");
-    return !!code && !getStoredToken();
-  });
+  // Initial state must match SSR output (no window, no localStorage) — reading
+  // localStorage from a useState initializer makes the server render `null` and
+  // the client hydrate with a stored value, which is a guaranteed mismatch.
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Handle OAuth callback (code in URL)
+  // Hydrate from localStorage after mount, and resolve any pending OAuth callback.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    if (!code || token) return;
+    const storedToken = getStoredToken();
+    const storedUser = getStoredUser();
+    setUser(storedUser);
+    setToken(storedToken);
+
+    const code = new URLSearchParams(window.location.search).get("code");
+    if (!code || storedToken) {
+      setLoading(false);
+      return;
+    }
 
     let cancelled = false;
-
     exchangeGitHubCode(code)
       .then((result) => {
         if (cancelled) return;
@@ -63,7 +68,7 @@ export function useAuth() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, []);
 
   const login = useCallback(async () => {
     try {

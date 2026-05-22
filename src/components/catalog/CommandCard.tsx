@@ -94,7 +94,7 @@ export function CommandCard({ command }: { command: CommandSummary }) {
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
             <Download className="h-3.5 w-3.5" />
-            {command.install_count.toLocaleString()}
+            {command.install_count.toLocaleString("en-US")}
           </span>
           <span>v{command.latest_version}</span>
         </div>

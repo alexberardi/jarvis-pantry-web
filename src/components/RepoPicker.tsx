@@ -196,7 +196,7 @@ export function RepoPicker({ token, value, onChange, disabled }: RepoPickerProps
                       </span>
                     )}
                     <span>
-                      Updated {new Date(repo.updated_at).toLocaleDateString()}
+                      Updated {new Date(repo.updated_at).toLocaleDateString("en-US")}
                     </span>
                   </div>
                 </div>

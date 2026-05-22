@@ -63,7 +63,7 @@ const quickSubmitNewShape: QuickSubmitResult = {
   static_analysis: {
     passed: true,
     findings: [],
-    warnings: [],
+    warnings_structured: [],
     checks_passed: 8,
   },
   cost_estimate: null,
@@ -78,7 +78,7 @@ const quickSubmitLegacyErrors: QuickSubmitResult = {
   static_analysis: {
     passed: false,
     findings: [],
-    warnings: [],
+    warnings_structured: [],
     // @ts-expect-error legacy `errors: string[]` field is gone after #18 hard-cut
     errors: ["something bad"],
     checks_passed: 0,
@@ -95,7 +95,7 @@ const quickSubmitLegacyDangerous: QuickSubmitResult = {
   static_analysis: {
     passed: true,
     findings: [],
-    warnings: [],
+    warnings_structured: [],
     // @ts-expect-error legacy `dangerous_patterns: string[]` field is gone
     dangerous_patterns: ["eval()"],
     checks_passed: 8,
@@ -153,7 +153,7 @@ const quickSubmitWithReasonCodes: QuickSubmitResult = {
   static_analysis: {
     passed: false,
     findings: [fullFinding],
-    warnings: [],
+    warnings_structured: [],
     reason_codes: ["static_analysis_disallowed_primitive"],
     message: "Static analysis failed",
     checks_passed: 7,

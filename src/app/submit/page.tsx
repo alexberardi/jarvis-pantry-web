@@ -292,23 +292,29 @@ function SubmitPageInner() {
                 </span>{" "}
                 v{preview.version}
               </p>
-              <p>
-                Static analysis: {preview.static_analysis.checks_passed} checks
-                passed
-                {preview.static_analysis.warnings.length > 0 &&
-                  `, ${preview.static_analysis.warnings.length} warning(s)`}
-              </p>
-              {(preview.static_analysis.findings.length > 0 ||
-                preview.static_analysis.warnings.length > 0) && (
-                <div className="mt-2 space-y-2">
-                  {preview.static_analysis.findings.map((f, i) => (
-                    <FindingCard key={`f-${i}`} finding={f} />
-                  ))}
-                  {preview.static_analysis.warnings.map((w, i) => (
-                    <FindingCard key={`w-${i}`} finding={w} />
-                  ))}
-                </div>
-              )}
+              {(() => {
+                const errors = preview.static_analysis.findings ?? [];
+                const warnings = preview.static_analysis.warnings_structured ?? [];
+                return (
+                  <>
+                    <p>
+                      Static analysis: {preview.static_analysis.checks_passed} checks
+                      passed
+                      {warnings.length > 0 && `, ${warnings.length} warning(s)`}
+                    </p>
+                    {(errors.length > 0 || warnings.length > 0) && (
+                      <div className="mt-2 space-y-2">
+                        {errors.map((f, i) => (
+                          <FindingCard key={`f-${i}`} finding={f} />
+                        ))}
+                        {warnings.map((w, i) => (
+                          <FindingCard key={`w-${i}`} finding={w} />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
 
