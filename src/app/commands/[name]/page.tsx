@@ -180,7 +180,7 @@ export default function CommandDetailPage({
       <div className="mt-6 flex flex-wrap gap-6 text-sm text-[var(--color-text-muted)]">
         <span className="flex items-center gap-1.5">
           <Download className="h-4 w-4" />
-          {command.install_count.toLocaleString()} installs
+          {command.install_count.toLocaleString("en-US")} installs
         </span>
         <span className="flex items-center gap-1.5">
           <Tag className="h-4 w-4" />v{command.latest_version}
@@ -314,7 +314,7 @@ export default function CommandDetailPage({
                   {v.published_at && (
                     <span className="flex items-center gap-1">
                       <Clock className="h-3.5 w-3.5" />
-                      {new Date(v.published_at).toLocaleDateString()}
+                      {new Date(v.published_at).toLocaleDateString("en-US")}
                     </span>
                   )}
                 </span>
@@ -362,7 +362,7 @@ export default function CommandDetailPage({
                 <p className="mt-2 text-xs text-[var(--color-text-muted)]">
                   {r.author}
                   {r.created_at &&
-                    ` - ${new Date(r.created_at).toLocaleDateString()}`}
+                    ` - ${new Date(r.created_at).toLocaleDateString("en-US")}`}
                 </p>
               </div>
             ))}

@@ -194,8 +194,13 @@ export interface QuickSubmitResult {
   version: string;
   static_analysis: {
     passed: boolean;
-    findings: Finding[];
-    warnings: Finding[];
+    // Structured errors (severity=error). Optional — older preview payloads
+    // may omit it entirely.
+    findings?: Finding[];
+    // Structured warnings (severity=warning). The backend emits this under
+    // `warnings_structured`. The legacy `warnings: string[]` key still exists
+    // on the wire but is intentionally not surfaced here (per #18 hard-cut).
+    warnings_structured?: Finding[];
     reason_codes?: string[];
     message?: string;
     checks_passed: number;

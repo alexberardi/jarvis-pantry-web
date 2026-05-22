@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import {
   type AuthUser,
   getGitHubAuthUrl,
@@ -10,48 +10,88 @@ import {
 
 const TOKEN_KEY = "pantry_github_token";
 const USER_KEY = "pantry_github_user";
+const AUTH_CHANGE_EVENT = "pantry-auth-change";
 
-function getStoredToken(): string | null {
+function readStoredToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(TOKEN_KEY);
 }
 
-function getStoredUser(): AuthUser | null {
+// JSON.parse returns a fresh object every call. useSyncExternalStore compares
+// snapshots by reference, so we must memoize the parsed user against its raw
+// localStorage string or React detects "changed" on every render → infinite loop.
+let cachedUserRaw: string | null = null;
+let cachedUser: AuthUser | null = null;
+
+function readStoredUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(USER_KEY);
-  if (!raw) return null;
+  if (raw === cachedUserRaw) return cachedUser;
+  cachedUserRaw = raw;
+  if (!raw) {
+    cachedUser = null;
+    return null;
+  }
   try {
-    return JSON.parse(raw);
+    cachedUser = JSON.parse(raw);
+    return cachedUser;
   } catch {
     localStorage.removeItem(USER_KEY);
+    cachedUserRaw = null;
+    cachedUser = null;
     return null;
   }
 }
 
-export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(() => getStoredUser());
-  const [token, setToken] = useState<string | null>(() => getStoredToken());
-  const [loading, setLoading] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const code = new URLSearchParams(window.location.search).get("code");
-    return !!code && !getStoredToken();
-  });
+function subscribeToAuthStore(onChange: () => void): () => void {
+  window.addEventListener(AUTH_CHANGE_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(AUTH_CHANGE_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
 
-  // Handle OAuth callback (code in URL)
+function notifyAuthChanged(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+  }
+}
+
+const serverSnapshotNull = () => null;
+
+export function useAuth() {
+  // useSyncExternalStore returns the server snapshot during SSR and on the
+  // first client render (so hydration HTML matches), then re-renders with the
+  // localStorage value. No synchronous setState in an effect → satisfies the
+  // React 19 react-hooks/set-state-in-effect lint rule.
+  const token = useSyncExternalStore(
+    subscribeToAuthStore,
+    readStoredToken,
+    serverSnapshotNull,
+  );
+  const user = useSyncExternalStore(
+    subscribeToAuthStore,
+    readStoredUser,
+    serverSnapshotNull,
+  );
+
+  // Only true while an OAuth-code exchange is in flight.
+  const [loading, setLoading] = useState(false);
+
+  // Resolve pending OAuth callback. setState calls live inside the promise
+  // continuations, not in the effect body, so the lint rule does not fire.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
+    const code = new URLSearchParams(window.location.search).get("code");
     if (!code || token) return;
 
     let cancelled = false;
-
     exchangeGitHubCode(code)
       .then((result) => {
         if (cancelled) return;
         localStorage.setItem(TOKEN_KEY, result.access_token);
         localStorage.setItem(USER_KEY, JSON.stringify(result.user));
-        setToken(result.access_token);
-        setUser(result.user);
+        notifyAuthChanged();
         setLoading(false);
         window.history.replaceState({}, "", window.location.pathname);
       })
@@ -78,16 +118,15 @@ export function useAuth() {
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
-    setToken(null);
-    setUser(null);
+    notifyAuthChanged();
   }, []);
 
   const validate = useCallback(async () => {
     if (!token) return false;
     try {
       const u = await getCurrentUser(token);
-      setUser(u);
       localStorage.setItem(USER_KEY, JSON.stringify(u));
+      notifyAuthChanged();
       return true;
     } catch {
       logout();
