@@ -17,14 +17,28 @@ function readStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+// JSON.parse returns a fresh object every call. useSyncExternalStore compares
+// snapshots by reference, so we must memoize the parsed user against its raw
+// localStorage string or React detects "changed" on every render → infinite loop.
+let cachedUserRaw: string | null = null;
+let cachedUser: AuthUser | null = null;
+
 function readStoredUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(USER_KEY);
-  if (!raw) return null;
+  if (raw === cachedUserRaw) return cachedUser;
+  cachedUserRaw = raw;
+  if (!raw) {
+    cachedUser = null;
+    return null;
+  }
   try {
-    return JSON.parse(raw);
+    cachedUser = JSON.parse(raw);
+    return cachedUser;
   } catch {
     localStorage.removeItem(USER_KEY);
+    cachedUserRaw = null;
+    cachedUser = null;
     return null;
   }
 }
