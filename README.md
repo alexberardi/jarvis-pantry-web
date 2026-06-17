@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# jarvis-pantry-web
+
+Next.js frontend for the **Jarvis Pantry** — a community package store and AI Forge for `IJarvisCommand` packages. It talks to the `jarvis-pantry` backend (port 7721) for the catalog, package detail/reviews, submission pipeline, and AI-powered package generation (the Forge).
+
+## Features
+
+- **Catalog** — browse and search published packages with category filters and sorting.
+- **Package detail** — versions, reviews, security report, and install instructions.
+- **Forge** — a split-pane IDE for AI-powered package generation (chat on the left, CodeMirror editor on the right), with model selection, BYOK (bring-your-own Anthropic/OpenAI key), AST validation, and one-click publish to GitHub.
+- **Submit** — repo picker plus a live validation-pipeline tracker.
 
 ## Getting Started
 
-First, run the development server:
+Requires Node.js 20+ and the `jarvis-pantry` backend running on port 7721.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # then edit values as needed
+npm run dev                  # http://localhost:7720
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Other scripts:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build      # production build (Next.js standalone output)
+npm run start      # serve the production build
+npm run lint       # eslint
+npm run typecheck  # tsc --noEmit
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment Variables
 
-## Learn More
+Copy `.env.example` to `.env.local` and adjust. `.env.local` is gitignored and holds your local values.
 
-To learn more about Next.js, take a look at the following resources:
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `PANTRY_API_URL` | no | `http://localhost:7721` | Backend URL used by the Next.js server-side rewrites that proxy `/v1/*` and `/health`. |
+| `NEXT_PUBLIC_PANTRY_API_URL` | no | `http://localhost:7721` | Backend URL exposed to the browser for client-side Forge generation calls (these bypass the rewrite proxy to avoid timeout issues). |
+| `PORT` | no | `7720` | Dev/prod server port. |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## API Proxy
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Next.js rewrites (see `next.config.ts`) proxy `/v1/*` and `/health` to `PANTRY_API_URL`. Forge generation requests go directly to `NEXT_PUBLIC_PANTRY_API_URL` from the browser to avoid proxy timeouts on long-running generations.
 
-## Deploy on Vercel
+## Project Layout
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+See [`CLAUDE.md`](CLAUDE.md) for the full architecture, page map, and Forge details.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Tech Stack
+
+Next.js 16 (App Router, TypeScript) · React 19 · TanStack Query · Tailwind CSS v4 · Axios · CodeMirror 6 · Lucide React · Sonner.
