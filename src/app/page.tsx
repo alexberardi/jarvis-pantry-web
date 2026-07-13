@@ -18,6 +18,12 @@ export default function BrowsePage() {
     q: query || undefined,
     category: category || undefined,
     sort,
+    // The API defaults to per_page=20 and this page has no pagination control,
+    // so the catalog rendered only the first 20 packages while the header
+    // printed `data.total` — the store said "25 commands" and showed 20, and
+    // the missing five (incl. Philips Hue) were unreachable in the browser.
+    // Ask for the whole catalog; add real pagination when it outgrows this.
+    per_page: 100,
   });
   const { data: categories } = useCategories();
 

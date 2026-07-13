@@ -14,6 +14,7 @@ export function useSearchCommands(params: {
   category?: string;
   sort?: string;
   page?: number;
+  per_page?: number;
 }) {
   return useQuery({
     queryKey: ["commands", params],
