@@ -1,130 +1,44 @@
-"use client";
+import BrowseClient from "./BrowseClient";
+import { CATALOG_PAGE_SIZE, DEFAULT_SORT } from "@/lib/catalog";
+import type { CommandsResponse } from "@/api/pantry";
 
-import { useState } from "react";
-import { Sparkles, Package } from "lucide-react";
-import Link from "next/link";
-import { useSearchCommands, useCategories } from "@/hooks/useCommands";
-import { CommandCard } from "@/components/catalog/CommandCard";
-import { SearchBar } from "@/components/catalog/SearchBar";
-import { CategoryFilter } from "@/components/catalog/CategoryFilter";
-import { cn } from "@/lib/utils";
+// The browse page was a pure client component, so the server sent an empty shell
+// and the catalog only appeared once the client-side query resolved. Anything
+// that doesn't run JavaScript — crawlers, link previews, "view source" — saw a
+// store advertising **0 commands**. Which is the first thing a skeptic checks
+// when you link your package store from a launch post.
+//
+// Fetch the default view on the server and seed the client with it. Interaction
+// (search, filter, sort) still happens client-side; this only pre-renders the
+// landing state.
 
-export default function BrowsePage() {
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<string | null>(null);
-  const [sort, setSort] = useState("popular");
+// Render at REQUEST time, not build time. PANTRY_API_URL lives in fly.toml's
+// [env] — that's runtime env for the machine and is NOT present during the
+// Docker build. A statically prerendered page would therefore fetch
+// localhost:7721 in the builder, fail, and bake an EMPTY store into the HTML —
+// worse than the bug it was meant to fix. Request-time rendering sees the real
+// runtime env.
+export const dynamic = "force-dynamic";
 
-  const { data, isLoading } = useSearchCommands({
-    q: query || undefined,
-    category: category || undefined,
-    sort,
-    // The API defaults to per_page=20 and this page has no pagination control,
-    // so the catalog rendered only the first 20 packages while the header
-    // printed `data.total` — the store said "25 commands" and showed 20, and
-    // the missing five (incl. Philips Hue) were unreachable in the browser.
-    // Ask for the whole catalog; add real pagination when it outgrows this.
-    per_page: 100,
-  });
-  const { data: categories } = useCategories();
+async function fetchCatalog(): Promise<CommandsResponse | undefined> {
+  // Server-side we can't use the Next rewrite (that's a browser-path concern) —
+  // talk to the API directly.
+  const base = process.env.PANTRY_API_URL || "http://localhost:7721";
+  try {
+    const res = await fetch(
+      `${base}/v1/commands?sort=${DEFAULT_SORT}&per_page=${CATALOG_PAGE_SIZE}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) return undefined;
+    return (await res.json()) as CommandsResponse;
+  } catch {
+    // Never let a store outage take the page down — the client will retry the
+    // fetch itself, which is exactly the behaviour we had before.
+    return undefined;
+  }
+}
 
-  const commands = data?.commands || [];
-  const isEmpty = !isLoading && commands.length === 0;
-
-  return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      {/* Hero */}
-      <div className="mb-10 text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-[var(--color-text)]">
-          Jarvis Pantry
-        </h1>
-        <p className="mt-3 text-lg text-[var(--color-text-muted)]">
-          Community voice commands for your Jarvis assistant
-        </p>
-        <div className="mt-6 flex justify-center gap-3">
-          <Link
-            href="/forge"
-            className={cn(
-              "inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium",
-              "bg-[var(--color-primary)] text-white transition-colors",
-              "hover:bg-[var(--color-primary)]/90"
-            )}
-          >
-            <Sparkles className="h-4 w-4" />
-            Build with Forge
-          </Link>
-        </div>
-      </div>
-
-      {/* Search + Filters */}
-      <div className="mb-6 space-y-4">
-        <SearchBar value={query} onChange={setQuery} />
-        {categories && categories.length > 0 && (
-          <CategoryFilter
-            categories={categories}
-            selected={category}
-            onSelect={setCategory}
-          />
-        )}
-      </div>
-
-      {/* Sort tabs */}
-      <div className="mb-6 flex items-center gap-4 border-b border-[var(--color-border)]">
-        {[
-          { key: "popular", label: "Popular" },
-          { key: "newest", label: "Newest" },
-          { key: "name", label: "A-Z" },
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setSort(tab.key)}
-            className={cn(
-              "border-b-2 px-1 pb-2 text-sm font-medium transition-colors",
-              sort === tab.key
-                ? "border-[var(--color-primary)] text-[var(--color-primary)]"
-                : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-        <span className="ml-auto text-sm text-[var(--color-text-muted)]">
-          {data?.total ?? 0} commands
-        </span>
-      </div>
-
-      {/* Grid */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-40 animate-pulse rounded-lg bg-[var(--color-surface-alt)]"
-            />
-          ))}
-        </div>
-      ) : isEmpty ? (
-        <div className="py-20 text-center">
-          <Package className="mx-auto h-12 w-12 text-[var(--color-text-muted)]" />
-          <p className="mt-4 text-lg font-medium text-[var(--color-text)]">
-            No commands yet
-          </p>
-          <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-            Be the first to publish a command, or build one with{" "}
-            <Link
-              href="/forge"
-              className="text-[var(--color-primary)] underline"
-            >
-              Forge
-            </Link>
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {commands.map((cmd) => (
-            <CommandCard key={cmd.command_name} command={cmd} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
+export default async function BrowsePage() {
+  const initialData = await fetchCatalog();
+  return <BrowseClient initialData={initialData} />;
 }
