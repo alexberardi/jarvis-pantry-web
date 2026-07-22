@@ -10,6 +10,11 @@ COPY . .
 ARG NEXT_PUBLIC_PANTRY_API_URL
 ENV NEXT_PUBLIC_PANTRY_API_URL=${NEXT_PUBLIC_PANTRY_API_URL}
 
+# Cloudflare Web Analytics beacon token (public — inlined into client bundle at
+# build time). Must be pantry's OWN token, not shared with another host.
+ARG NEXT_PUBLIC_CF_BEACON_TOKEN
+ENV NEXT_PUBLIC_CF_BEACON_TOKEN=${NEXT_PUBLIC_CF_BEACON_TOKEN}
+
 RUN npm run build
 
 FROM node:22-slim AS runner
