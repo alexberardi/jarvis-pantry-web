@@ -4,13 +4,19 @@ import { useEffect } from "react";
 
 // Cloudflare Web Analytics — cookieless, measures real human page loads.
 // Host-gated to production so local dev and preview deploys don't report
-// pageviews, and idempotent against re-injection. The beacon token is public
-// by design (it ships in page source), so hardcoding it here is fine.
-const CF_TOKEN = "8ab1d8fdf7a548e09d2d316660e3520c";
+// pageviews, and idempotent against re-injection.
+//
+// The token MUST be pantry's own Web Analytics site token — a CF token is bound
+// to one hostname, and beacons from a non-matching host are CORS-rejected (that
+// bug once had pantry sharing the installer's token, so pantry reported 0). It's
+// public by design (ships in page source), so it lives in a NEXT_PUBLIC_* build
+// arg (inlined at `next build`), not a secret. Unset = no-op.
+const CF_TOKEN = process.env.NEXT_PUBLIC_CF_BEACON_TOKEN?.trim();
 const PROD_HOST = "pantry.jarvisautomation.io";
 
 export function CloudflareAnalytics() {
   useEffect(() => {
+    if (!CF_TOKEN) return;
     if (window.location.hostname !== PROD_HOST) return;
     if (document.querySelector("script[data-cf-beacon]")) return;
     const s = document.createElement("script");

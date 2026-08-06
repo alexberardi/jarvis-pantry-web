@@ -5,6 +5,10 @@ primary_region = "iad"
   dockerfile = "Dockerfile"
   [build.args]
     NEXT_PUBLIC_PANTRY_API_URL = "https://pantry-api.jarvisautomation.io"
+    # Pantry's OWN Cloudflare Web Analytics token (create the site for
+    # pantry.jarvisautomation.io — do NOT reuse the installer's token, or
+    # beacons get CORS-rejected). Public value; safe to commit here.
+    NEXT_PUBLIC_CF_BEACON_TOKEN = "5a668afe285b4563a7f2ab62982cd652"
 
 [env]
   PANTRY_API_URL = "https://pantry-api.jarvisautomation.io"
