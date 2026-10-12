@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Package, Sparkles, Plus, LogIn, LogOut, Settings } from "lucide-react";
+import { Package, Sparkles, Plus, LogIn, LogOut, Settings, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthContext } from "@/hooks/AuthContext";
 import { getForgeFeatures } from "@/api/pantry";
@@ -26,8 +26,12 @@ export function Header() {
   const { user, loading, login, logout } = useAuthContext();
   // The Settings link only exists when the Pantry has local LLM support switched on.
   const [localLlm, setLocalLlm] = useState(false);
+  const [privatePackages, setPrivatePackages] = useState(false);
   useEffect(() => {
-    getForgeFeatures().then((f) => setLocalLlm(f.local_llm));
+    getForgeFeatures().then((f) => {
+      setLocalLlm(f.local_llm);
+      setPrivatePackages(f.private_packages);
+    });
   }, []);
 
   return (
@@ -67,6 +71,15 @@ export function Header() {
             <Sparkles className="h-4 w-4" />
             Forge
           </Link>
+          {privatePackages && (
+            <Link
+              href="/private"
+              className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]"
+            >
+              <Lock className="h-4 w-4" />
+              Private
+            </Link>
+          )}
           {localLlm && (
             <Link
               href="/settings"

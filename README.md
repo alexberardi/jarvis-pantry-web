@@ -61,3 +61,10 @@ carries `docker-compose.local.yaml` to run both together.
 Other changes: the Dockerfile passes `PANTRY_API_URL` into the build (the `/v1` proxy target is baked in at build time)
 and creates the missing `public/` directory; the Forge page no longer crashes on a plain-HTTP address, where
 `crypto.randomUUID` is unavailable.
+
+## Private packages (fork)
+
+When the backend has an admin key (`ADMIN_API_KEY`), a **Private** page (`/private`) adds a package from a Git repository
+to this Pantry and lists or unpublishes the ones already added. With `PANTRY_UPSTREAM_URL` set the catalogue pages also show
+the public packages. The page is hidden, and says so, when no admin key is configured. There is no security review for
+packages added this way.
