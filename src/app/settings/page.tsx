@@ -24,6 +24,9 @@ function errorText(e: unknown): string {
   if (err.response?.status === 401) {
     return "The Pantry's admin key is missing or wrong. This is not the model server's API key: enter the Pantry's ADMIN_API_KEY in the Admin key field.";
   }
+  if (err.response?.status === 403) {
+    return "This Pantry has no admin key set, so these settings cannot be changed. Set ADMIN_API_KEY on the Pantry.";
+  }
   return err.response?.data?.detail || err.message || "Request failed";
 }
 
@@ -41,8 +44,14 @@ export default function SettingsPage() {
   // null while checking; false means the Pantry has local LLM support switched off.
   const [enabled, setEnabled] = useState<boolean | null>(null);
 
+  // Saving and probing need the Pantry's admin key, so the Pantry must have one configured.
+  const [adminConfigured, setAdminConfigured] = useState(true);
+
   useEffect(() => {
-    getForgeFeatures().then((f) => setEnabled(f.local_llm));
+    getForgeFeatures().then((f) => {
+      setEnabled(f.local_llm);
+      setAdminConfigured(f.admin_key_configured);
+    });
   }, []);
 
   useEffect(() => {
@@ -53,7 +62,8 @@ export default function SettingsPage() {
         setSaved(s);
         setBaseUrl(s.base_url);
         setDefaultModel(s.default_model);
-        if (s.base_url) void detect(s.base_url, undefined, s.default_model);
+        // Detecting needs the admin key: only do it on load when one is already stored for this session.
+        if (s.base_url && getStoredAdminKey()) void detect(s.base_url, undefined, s.default_model);
       })
       .catch((e) => setStatus({ kind: "error", text: errorText(e) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,9 +217,17 @@ export default function SettingsPage() {
           </p>
         </div>
 
+        {!adminConfigured && (
+          <p className="flex items-start gap-1.5 text-sm text-red-600">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            This Pantry has no admin key set, so these settings cannot be changed or tested. Set{" "}
+            <code>ADMIN_API_KEY</code> on the Pantry and restart it.
+          </p>
+        )}
+
         <div>
           <label className="block text-xs font-medium text-[var(--color-text-muted)]">
-            Admin key (only if the Pantry sets <code>ADMIN_API_KEY</code>)
+            Admin key (the Pantry&apos;s <code>ADMIN_API_KEY</code>; required to save or detect)
           </label>
           <input
             type="password"

@@ -354,6 +354,8 @@ export interface ForgeFeatures {
   /** Adding a package from a repository is available (the Pantry has an admin key). */
   private_packages: boolean;
   upstream_mirror: boolean;
+  /** The Pantry has ADMIN_API_KEY set. Saving or probing the local LLM server needs it. */
+  admin_key_configured: boolean;
 }
 
 export async function getForgeFeatures(): Promise<ForgeFeatures> {
@@ -363,9 +365,10 @@ export async function getForgeFeatures(): Promise<ForgeFeatures> {
       local_llm: Boolean(data?.local_llm),
       private_packages: Boolean(data?.private_packages),
       upstream_mirror: Boolean(data?.upstream_mirror),
+      admin_key_configured: Boolean(data?.admin_key_configured ?? data?.private_packages),
     };
   } catch {
-    return { local_llm: false, private_packages: false, upstream_mirror: false };
+    return { local_llm: false, private_packages: false, upstream_mirror: false, admin_key_configured: false };
   }
 }
 
