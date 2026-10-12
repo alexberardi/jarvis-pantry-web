@@ -138,7 +138,9 @@ export default function ForgePage() {
       const result = await forgeGenerate({
         description: userMessage,
         model: selectedModel,
-        llm_api_key: apiKey.trim(),
+        // A local model uses the server's saved key. Never send this field's contents: it may be a hosted
+        // provider's key typed for another model.
+        llm_api_key: isLocal ? "" : apiKey.trim(),
         conversation_history: history.slice(0, -1),
       });
 

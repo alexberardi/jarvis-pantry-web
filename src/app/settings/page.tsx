@@ -54,18 +54,24 @@ export default function SettingsPage() {
     });
   }, []);
 
-  useEffect(() => {
-    if (!enabled) return;
-    setAdminKey(getStoredAdminKey());
+  // The Pantry only reveals the server address to a caller that sends the admin key, so this is repeated once a key
+  // has been typed (see "Show saved server").
+  function loadSettings() {
     getLocalLlmSettings()
       .then((s) => {
         setSaved(s);
-        setBaseUrl(s.base_url);
+        if (s.base_url) setBaseUrl(s.base_url);
         setDefaultModel(s.default_model);
         // Detecting needs the admin key: only do it on load when one is already stored for this session.
         if (s.base_url && getStoredAdminKey()) void detect(s.base_url, undefined, s.default_model);
       })
       .catch((e) => setStatus({ kind: "error", text: errorText(e) }));
+  }
+
+  useEffect(() => {
+    if (!enabled) return;
+    setAdminKey(getStoredAdminKey());
+    loadSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
 
@@ -237,6 +243,19 @@ export default function SettingsPage() {
             className={inputClass}
             autoComplete="off"
           />
+          {saved && !saved.base_url && (
+            <button
+              type="button"
+              onClick={() => {
+                storeAdminKey(adminKey.trim());
+                loadSettings();
+              }}
+              disabled={!adminKey.trim()}
+              className="mt-2 text-xs text-[var(--color-primary)] underline disabled:opacity-50"
+            >
+              Show saved server (needs the admin key)
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-3 pt-1">

@@ -381,9 +381,20 @@ export interface LocalPackage {
   description: string;
 }
 
+/**
+ * Packages added from a repository on this Pantry. The backend marks every item with `source`
+ * ("local" for those, "pantry" for public submissions, "upstream" for the mirror), with or without the mirror.
+ * Local packages sort first, but the list is paged until it has been read in full.
+ */
 export async function listLocalPackages(): Promise<LocalPackage[]> {
-  const { data } = await pantryApi.get("/v1/commands", { params: { per_page: 100, sort: "name" } });
-  return (data.commands as (LocalPackage & { source?: string })[]).filter((c) => c.source === "local");
+  const found: LocalPackage[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const { data } = await pantryApi.get("/v1/commands", { params: { per_page: 100, sort: "name", page } });
+    const items = (data.commands ?? []) as (LocalPackage & { source?: string })[];
+    found.push(...items.filter((c) => c.source === "local"));
+    if (items.length === 0 || page * 100 >= (data.total ?? 0)) break;
+  }
+  return found;
 }
 
 export async function addPackageFromRepo(params: {
@@ -402,8 +413,9 @@ export async function removeLocalPackage(name: string): Promise<void> {
   await pantryApi.delete(`/v1/admin/commands/${encodeURIComponent(name)}/local`, { headers: adminHeaders() });
 }
 
+/** The server address is only returned for a caller that sends the admin key; otherwise `base_url` is empty. */
 export async function getLocalLlmSettings(): Promise<LocalLlmSettings> {
-  const { data } = await pantryApi.get("/v1/forge/local-llm");
+  const { data } = await pantryApi.get("/v1/forge/local-llm", { headers: adminHeaders() });
   return data;
 }
 
