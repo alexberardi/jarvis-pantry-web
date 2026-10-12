@@ -61,6 +61,8 @@ CSS variables match jarvis-admin colors. Supports dark mode via `prefers-color-s
 | `/commands/[name]` | Package detail (versions, reviews, security report, install instructions) |
 | `/forge` | Forge — AI-powered package builder with split-pane IDE |
 | `/submit` | Submit a package — repo picker + validation pipeline tracker |
+| `/settings` | Local LLM server address, key and default model, with model detection. Shown only when the backend reports `local_llm` |
+| `/private` | Add, list and unpublish private packages from a Git repository. Shown only when the backend reports `private_packages` |
 
 ## Forge
 
