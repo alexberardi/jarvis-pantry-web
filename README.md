@@ -49,3 +49,15 @@ See [`CLAUDE.md`](CLAUDE.md) for the full architecture, page map, and Forge deta
 ## Tech Stack
 
 Next.js 16 (App Router, TypeScript) · React 19 · TanStack Query · Tailwind CSS v4 · Axios · CodeMirror 6 · Lucide React · Sonner.
+
+## Local LLM settings (fork)
+
+This fork adds a **Settings** page (`/settings`) where you enter the address and key of an OpenAI-compatible server on
+your network, press **Detect models** and choose a default. The Forge page then lists the detected models first and needs
+no API key for them. It talks to the matching backend fork
+([opticon454/jarvis-pantry](https://github.com/opticon454/jarvis-pantry), branch `local-llm-settings`), which also
+carries `docker-compose.local.yaml` to run both together.
+
+Other changes: the Dockerfile passes `PANTRY_API_URL` into the build (the `/v1` proxy target is baked in at build time)
+and creates the missing `public/` directory; the Forge page no longer crashes on a plain-HTTP address, where
+`crypto.randomUUID` is unavailable.
