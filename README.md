@@ -52,7 +52,7 @@ Next.js 16 (App Router, TypeScript) · React 19 · TanStack Query · Tailwind CS
 
 ## Local LLM settings (fork)
 
-This fork adds a **Settings** page (`/settings`) where you enter the address and key of an OpenAI-compatible server on
+This fork adds a **Settings** page (`/settings`, shown only when the backend sets `FORGE_LOCAL_LLM_ENABLED`) where you enter the address and key of an OpenAI-compatible server on
 your network, press **Detect models** and choose a default. The Forge page then lists the detected models first and needs
 no API key for them. It talks to the matching backend fork
 ([opticon454/jarvis-pantry](https://github.com/opticon454/jarvis-pantry), branch `local-llm-settings`), which also

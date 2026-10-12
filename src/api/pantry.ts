@@ -348,6 +348,16 @@ function adminHeaders(): Record<string, string> {
   return key ? { "X-Admin-Key": key } : {};
 }
 
+/** Optional Forge features this Pantry has switched on (FORGE_LOCAL_LLM_ENABLED). Older backends have no such route. */
+export async function getForgeFeatures(): Promise<{ local_llm: boolean }> {
+  try {
+    const { data } = await pantryApi.get("/v1/forge/features");
+    return { local_llm: Boolean(data?.local_llm) };
+  } catch {
+    return { local_llm: false };
+  }
+}
+
 export async function getLocalLlmSettings(): Promise<LocalLlmSettings> {
   const { data } = await pantryApi.get("/v1/forge/local-llm");
   return data;

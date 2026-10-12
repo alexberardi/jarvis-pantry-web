@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, RefreshCw, Save, Server, CheckCircle2, AlertCircle } from "lucide-react";
 import {
   detectLocalLlmModels,
+  getForgeFeatures,
   getLocalLlmSettings,
   getStoredAdminKey,
   saveLocalLlmSettings,
@@ -35,8 +36,15 @@ export default function SettingsPage() {
   const [detecting, setDetecting] = useState(false);
   const [savingNow, setSavingNow] = useState(false);
   const [status, setStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  // null while checking; false means the Pantry has local LLM support switched off.
+  const [enabled, setEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
+    getForgeFeatures().then((f) => setEnabled(f.local_llm));
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) return;
     setAdminKey(getStoredAdminKey());
     getLocalLlmSettings()
       .then((s) => {
@@ -47,7 +55,7 @@ export default function SettingsPage() {
       })
       .catch((e) => setStatus({ kind: "error", text: errorText(e) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [enabled]);
 
   async function detect(url = baseUrl, key?: string, keep = defaultModel) {
     setDetecting(true);
@@ -94,6 +102,24 @@ export default function SettingsPage() {
     } finally {
       setSavingNow(false);
     }
+  }
+
+  if (enabled === null) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-10">
+        <Loader2 className="h-5 w-5 animate-spin text-[var(--color-text-muted)]" />
+      </div>
+    );
+  }
+
+  if (!enabled) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-10 text-center">
+        <p className="text-sm text-[var(--color-text-muted)]">
+          This page is not available: local LLM support is switched off on this Pantry.
+        </p>
+      </div>
+    );
   }
 
   return (
