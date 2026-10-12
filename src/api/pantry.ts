@@ -310,6 +310,67 @@ export interface ForgeModel {
   provider: string;
   estimated_cost: string;
   estimated_cost_usd: number;
+  /** True for the model chosen as the default on the local server. */
+  default?: boolean;
+}
+
+// ── Local LLM server settings ─────────────────────────────────────────
+
+export interface LocalLlmSettings {
+  base_url: string;
+  has_api_key: boolean;
+  default_model: string;
+  source: "database" | "environment" | "none";
+}
+
+export interface LocalLlmDetectResult {
+  ok: boolean;
+  models: string[];
+  error?: string;
+  default_model?: string;
+}
+
+const ADMIN_KEY_STORAGE = "pantry-admin-key";
+
+export function getStoredAdminKey(): string {
+  if (typeof window === "undefined") return "";
+  return window.sessionStorage.getItem(ADMIN_KEY_STORAGE) || "";
+}
+
+export function storeAdminKey(key: string): void {
+  if (typeof window === "undefined") return;
+  if (key) window.sessionStorage.setItem(ADMIN_KEY_STORAGE, key);
+  else window.sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+}
+
+function adminHeaders(): Record<string, string> {
+  const key = getStoredAdminKey();
+  return key ? { "X-Admin-Key": key } : {};
+}
+
+export async function getLocalLlmSettings(): Promise<LocalLlmSettings> {
+  const { data } = await pantryApi.get("/v1/forge/local-llm");
+  return data;
+}
+
+export async function saveLocalLlmSettings(params: {
+  base_url: string;
+  api_key?: string | null; // omit or null keeps the stored key, "" clears it
+  default_model?: string | null;
+}): Promise<LocalLlmSettings> {
+  const { data } = await pantryApi.put("/v1/forge/local-llm", params, { headers: adminHeaders() });
+  return data;
+}
+
+export async function detectLocalLlmModels(params: {
+  base_url?: string;
+  api_key?: string;
+}): Promise<LocalLlmDetectResult> {
+  const { data } = await pantryApi.post("/v1/forge/local-llm/detect", params, {
+    headers: adminHeaders(),
+    timeout: 20000,
+  });
+  return data;
 }
 
 export async function getForgeModels(): Promise<ForgeModel[]> {

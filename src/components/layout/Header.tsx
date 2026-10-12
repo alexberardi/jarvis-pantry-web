@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Package, Sparkles, Plus, LogIn, LogOut } from "lucide-react";
+import { Package, Sparkles, Plus, LogIn, LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthContext } from "@/hooks/AuthContext";
 
@@ -59,6 +59,13 @@ export function Header() {
           >
             <Sparkles className="h-4 w-4" />
             Forge
+          </Link>
+          <Link
+            href="/settings"
+            className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]"
+          >
+            <Settings className="h-4 w-4" />
+            Settings
           </Link>
           <a
             href="https://github.com/alexberardi/jarvis"
