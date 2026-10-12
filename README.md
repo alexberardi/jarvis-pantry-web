@@ -2,14 +2,6 @@
 
 Next.js frontend for the **Jarvis Pantry** — a community package store and AI Forge for `IJarvisCommand` packages. It talks to the `jarvis-pantry` backend (port 7721) for the catalog, package detail/reviews, submission pipeline, and AI-powered package generation (the Forge).
 
-> **This is a fork** ([opticon454/jarvis-pantry-web](https://github.com/opticon454/jarvis-pantry-web), branch
-> `local-llm-settings`) of [alexberardi/jarvis-pantry-web](https://github.com/alexberardi/jarvis-pantry-web). It adds a
-> **Settings** page for pointing the Forge at a model on your own network, a **Private** page for adding your own packages,
-> and a Forge that prefers your local models. Both new pages appear only when the backend says it supports them, so against
-> an unmodified Pantry this app looks and behaves like upstream. The matching backend is
-> [opticon454/jarvis-pantry](https://github.com/opticon454/jarvis-pantry), same branch, which also carries
-> `docker-compose.local.yaml` to run the two together.
-
 ## Features
 
 - **Catalog** — browse and search published packages with category filters and sorting.
@@ -17,7 +9,12 @@ Next.js frontend for the **Jarvis Pantry** — a community package store and AI 
 - **Forge** — a split-pane IDE for AI-powered package generation (chat on the left, CodeMirror editor on the right), with model selection, BYOK (bring-your-own Anthropic/OpenAI key), AST validation, and one-click publish to GitHub.
 - **Submit** — repo picker plus a live validation-pipeline tracker.
 
-## What this fork adds
+## Settings, Private packages and local models
+
+Two pages and a Forge change let a self-hosted Pantry use a model on your own network and publish packages privately. Both
+pages appear only when the backend ([jarvis-pantry](https://github.com/alexberardi/jarvis-pantry)) reports support for
+them, so against a Pantry that lacks the features this app looks and behaves as it always did. The backend repository's
+`docker-compose.local.yaml` runs the two together.
 
 | Page / change | Appears when | What it does |
 |---|---|---|
@@ -124,7 +121,7 @@ Next.js rewrites (see `next.config.ts`) proxy `/v1/*` and `/health` to `PANTRY_A
 
 ## Project Layout
 
-See [`CLAUDE.md`](CLAUDE.md) for the full architecture, page map, and Forge details. The fork's additions:
+See [`CLAUDE.md`](CLAUDE.md) for the full architecture, page map, and Forge details. The files behind the features above:
 
 | Path | Role |
 |---|---|
@@ -134,7 +131,7 @@ See [`CLAUDE.md`](CLAUDE.md) for the full architecture, page map, and Forge deta
 | `src/components/layout/Header.tsx` | Shows the **Settings** and **Private** links according to the features flags |
 | `src/app/forge/page.tsx` | Prefers the default local model; no key field for local models |
 
-## Other fixes in this fork
+## Build and runtime notes
 
 - **Builds with a custom API address.** The Dockerfile passes `PANTRY_API_URL` into the build, because the `/v1` proxy
   target is baked in at build time.
@@ -146,8 +143,3 @@ See [`CLAUDE.md`](CLAUDE.md) for the full architecture, page map, and Forge deta
 ## Tech Stack
 
 Next.js 16 (App Router, TypeScript) · React 19 · TanStack Query · Tailwind CSS v4 · Axios · CodeMirror 6 · Lucide React · Sonner.
-
-## Staying in step with upstream
-
-The changes are additive (two pages, a few API helpers, a header block and a Forge tweak), so `local-llm-settings` rebases
-cleanly onto upstream `main`.
