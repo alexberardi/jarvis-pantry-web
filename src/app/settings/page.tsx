@@ -21,7 +21,9 @@ const inputClass = cn(
 
 function errorText(e: unknown): string {
   const err = e as { response?: { data?: { detail?: string }; status?: number }; message?: string };
-  if (err.response?.status === 401) return "The admin key is missing or wrong.";
+  if (err.response?.status === 401) {
+    return "The Pantry's admin key is missing or wrong. This is not the model server's API key: enter the Pantry's ADMIN_API_KEY in the Admin key field.";
+  }
   return err.response?.data?.detail || err.message || "Request failed";
 }
 
@@ -60,6 +62,9 @@ export default function SettingsPage() {
   async function detect(url = baseUrl, key?: string, keep = defaultModel) {
     setDetecting(true);
     setStatus(null);
+    // The request reads the admin key from sessionStorage, which Save used to be the only thing to fill. Without
+    // this, typing the key and pressing Detect models sent no key and the Pantry answered 401.
+    if (adminKey.trim()) storeAdminKey(adminKey.trim());
     try {
       const result = await detectLocalLlmModels({ base_url: url, api_key: key });
       if (!result.ok) {
