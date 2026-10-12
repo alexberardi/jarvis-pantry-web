@@ -349,13 +349,54 @@ function adminHeaders(): Record<string, string> {
 }
 
 /** Optional Forge features this Pantry has switched on (FORGE_LOCAL_LLM_ENABLED). Older backends have no such route. */
-export async function getForgeFeatures(): Promise<{ local_llm: boolean }> {
+export interface ForgeFeatures {
+  local_llm: boolean;
+  /** Adding a package from a repository is available (the Pantry has an admin key). */
+  private_packages: boolean;
+  upstream_mirror: boolean;
+}
+
+export async function getForgeFeatures(): Promise<ForgeFeatures> {
   try {
     const { data } = await pantryApi.get("/v1/forge/features");
-    return { local_llm: Boolean(data?.local_llm) };
+    return {
+      local_llm: Boolean(data?.local_llm),
+      private_packages: Boolean(data?.private_packages),
+      upstream_mirror: Boolean(data?.upstream_mirror),
+    };
   } catch {
-    return { local_llm: false };
+    return { local_llm: false, private_packages: false, upstream_mirror: false };
   }
+}
+
+// ── Private (local) packages ──────────────────────────────────────────
+
+export interface LocalPackage {
+  command_name: string;
+  display_name: string;
+  latest_version: string;
+  description: string;
+}
+
+export async function listLocalPackages(): Promise<LocalPackage[]> {
+  const { data } = await pantryApi.get("/v1/commands", { params: { per_page: 100, sort: "name" } });
+  return (data.commands as (LocalPackage & { source?: string })[]).filter((c) => c.source === "local");
+}
+
+export async function addPackageFromRepo(params: {
+  github_repo_url: string;
+  ref?: string;
+  token?: string;
+}): Promise<{ command_name: string; version: string; package_type: string; git_commit_sha: string | null }> {
+  const { data } = await pantryApi.post("/v1/admin/commands/from-repo", params, {
+    headers: adminHeaders(),
+    timeout: 90000,
+  });
+  return data;
+}
+
+export async function removeLocalPackage(name: string): Promise<void> {
+  await pantryApi.delete(`/v1/admin/commands/${encodeURIComponent(name)}/local`, { headers: adminHeaders() });
 }
 
 export async function getLocalLlmSettings(): Promise<LocalLlmSettings> {
