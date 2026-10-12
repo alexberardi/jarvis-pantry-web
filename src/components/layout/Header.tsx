@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Package, Sparkles, Plus, LogIn, LogOut } from "lucide-react";
+import { Package, Sparkles, Plus, LogIn, LogOut, Settings, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthContext } from "@/hooks/AuthContext";
+import { getForgeFeatures } from "@/api/pantry";
 
 // lucide-react dropped its brand icons (incl. Github), so inline the mark to
 // keep the GitHub link's visual without depending on a removed export.
@@ -22,6 +24,15 @@ function GithubIcon({ className }: { className?: string }) {
 
 export function Header() {
   const { user, loading, login, logout } = useAuthContext();
+  // The Settings link only exists when the Pantry has local LLM support switched on.
+  const [localLlm, setLocalLlm] = useState(false);
+  const [privatePackages, setPrivatePackages] = useState(false);
+  useEffect(() => {
+    getForgeFeatures().then((f) => {
+      setLocalLlm(f.local_llm);
+      setPrivatePackages(f.private_packages);
+    });
+  }, []);
 
   return (
     <header className="border-b border-[var(--color-border)] bg-[var(--color-surface)]">
@@ -60,6 +71,24 @@ export function Header() {
             <Sparkles className="h-4 w-4" />
             Forge
           </Link>
+          {privatePackages && (
+            <Link
+              href="/private"
+              className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]"
+            >
+              <Lock className="h-4 w-4" />
+              Private
+            </Link>
+          )}
+          {localLlm && (
+            <Link
+              href="/settings"
+              className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]"
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </Link>
+          )}
           <a
             href="https://github.com/alexberardi/jarvis"
             target="_blank"

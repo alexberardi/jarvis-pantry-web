@@ -310,6 +310,133 @@ export interface ForgeModel {
   provider: string;
   estimated_cost: string;
   estimated_cost_usd: number;
+  /** True for the model chosen as the default on the local server. */
+  default?: boolean;
+}
+
+// ── Local LLM server settings ─────────────────────────────────────────
+
+export interface LocalLlmSettings {
+  base_url: string;
+  has_api_key: boolean;
+  default_model: string;
+  source: "database" | "environment" | "none";
+}
+
+export interface LocalLlmDetectResult {
+  ok: boolean;
+  models: string[];
+  error?: string;
+  default_model?: string;
+}
+
+const ADMIN_KEY_STORAGE = "pantry-admin-key";
+
+export function getStoredAdminKey(): string {
+  if (typeof window === "undefined") return "";
+  return window.sessionStorage.getItem(ADMIN_KEY_STORAGE) || "";
+}
+
+export function storeAdminKey(key: string): void {
+  if (typeof window === "undefined") return;
+  if (key) window.sessionStorage.setItem(ADMIN_KEY_STORAGE, key);
+  else window.sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+}
+
+function adminHeaders(): Record<string, string> {
+  const key = getStoredAdminKey();
+  return key ? { "X-Admin-Key": key } : {};
+}
+
+/** Optional Forge features this Pantry has switched on (FORGE_LOCAL_LLM_ENABLED). Older backends have no such route. */
+export interface ForgeFeatures {
+  local_llm: boolean;
+  /** Adding a package from a repository is available (the Pantry has an admin key). */
+  private_packages: boolean;
+  upstream_mirror: boolean;
+  /** The Pantry has ADMIN_API_KEY set. Saving or probing the local LLM server needs it. */
+  admin_key_configured: boolean;
+}
+
+export async function getForgeFeatures(): Promise<ForgeFeatures> {
+  try {
+    const { data } = await pantryApi.get("/v1/forge/features");
+    return {
+      local_llm: Boolean(data?.local_llm),
+      private_packages: Boolean(data?.private_packages),
+      upstream_mirror: Boolean(data?.upstream_mirror),
+      admin_key_configured: Boolean(data?.admin_key_configured ?? data?.private_packages),
+    };
+  } catch {
+    return { local_llm: false, private_packages: false, upstream_mirror: false, admin_key_configured: false };
+  }
+}
+
+// ── Private (local) packages ──────────────────────────────────────────
+
+export interface LocalPackage {
+  command_name: string;
+  display_name: string;
+  latest_version: string;
+  description: string;
+}
+
+/**
+ * Packages added from a repository on this Pantry. The backend marks every item with `source`
+ * ("local" for those, "pantry" for public submissions, "upstream" for the mirror), with or without the mirror.
+ * Local packages sort first, but the list is paged until it has been read in full.
+ */
+export async function listLocalPackages(): Promise<LocalPackage[]> {
+  const found: LocalPackage[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const { data } = await pantryApi.get("/v1/commands", { params: { per_page: 100, sort: "name", page } });
+    const items = (data.commands ?? []) as (LocalPackage & { source?: string })[];
+    found.push(...items.filter((c) => c.source === "local"));
+    if (items.length === 0 || page * 100 >= (data.total ?? 0)) break;
+  }
+  return found;
+}
+
+export async function addPackageFromRepo(params: {
+  github_repo_url: string;
+  ref?: string;
+  token?: string;
+}): Promise<{ command_name: string; version: string; package_type: string; git_commit_sha: string | null }> {
+  const { data } = await pantryApi.post("/v1/admin/commands/from-repo", params, {
+    headers: adminHeaders(),
+    timeout: 90000,
+  });
+  return data;
+}
+
+export async function removeLocalPackage(name: string): Promise<void> {
+  await pantryApi.delete(`/v1/admin/commands/${encodeURIComponent(name)}/local`, { headers: adminHeaders() });
+}
+
+/** The server address is only returned for a caller that sends the admin key; otherwise `base_url` is empty. */
+export async function getLocalLlmSettings(): Promise<LocalLlmSettings> {
+  const { data } = await pantryApi.get("/v1/forge/local-llm", { headers: adminHeaders() });
+  return data;
+}
+
+export async function saveLocalLlmSettings(params: {
+  base_url: string;
+  api_key?: string | null; // omit or null keeps the stored key, "" clears it
+  default_model?: string | null;
+}): Promise<LocalLlmSettings> {
+  const { data } = await pantryApi.put("/v1/forge/local-llm", params, { headers: adminHeaders() });
+  return data;
+}
+
+export async function detectLocalLlmModels(params: {
+  base_url?: string;
+  api_key?: string;
+}): Promise<LocalLlmDetectResult> {
+  const { data } = await pantryApi.post("/v1/forge/local-llm/detect", params, {
+    headers: adminHeaders(),
+    timeout: 20000,
+  });
+  return data;
 }
 
 export async function getForgeModels(): Promise<ForgeModel[]> {
