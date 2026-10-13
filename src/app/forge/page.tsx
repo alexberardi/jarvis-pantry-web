@@ -61,7 +61,12 @@ export default function ForgePage() {
 
   // Load available models on mount
   useEffect(() => {
-    getForgeModels().then(setModels).catch(() => {
+    getForgeModels().then((list) => {
+      setModels(list);
+      // Prefer the default model of the local server (free, and set in Settings) over a paid hosted model.
+      const preferred = list.find((m) => m.default) || list.find((m) => m.provider === "local");
+      if (preferred) setSelectedModel(preferred.id);
+    }).catch(() => {
       // Fallback if endpoint isn't available yet
       setModels([
         { id: "sonnet", display_name: "Claude Sonnet 4", provider: "anthropic", estimated_cost: "~$0.108", estimated_cost_usd: 0.108 },
@@ -78,7 +83,15 @@ export default function ForgePage() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState("");
   const [validation, setValidation] = useState<ForgeValidation | null>(null);
-  const [sessionId] = useState(() => crypto.randomUUID());
+  const [sessionId] = useState(() =>
+    // crypto.randomUUID exists only in secure contexts (HTTPS or localhost); a LAN address is plain HTTP.
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+        })
+  );
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [shareCodeExpiry, setShareCodeExpiry] = useState<string | null>(null);
   const [shareCodeCopied, setShareCodeCopied] = useState(false);
@@ -91,7 +104,8 @@ export default function ForgePage() {
 
   const currentModel = models.find((m) => m.id === selectedModel);
   const currentProvider = currentModel?.provider || "anthropic";
-  const hasApiKey = apiKey.trim().length > 0;
+  const isLocal = currentProvider === "local";
+  const hasApiKey = apiKey.trim().length > 0 || isLocal;
   const canSend = hasApiKey && input.trim().length > 0 && !loading;
   const hasFiles = files.length > 0;
 
@@ -124,7 +138,9 @@ export default function ForgePage() {
       const result = await forgeGenerate({
         description: userMessage,
         model: selectedModel,
-        llm_api_key: apiKey.trim(),
+        // A local model uses the server's saved key. Never send this field's contents: it may be a hosted
+        // provider's key typed for another model.
+        llm_api_key: isLocal ? "" : apiKey.trim(),
         conversation_history: history.slice(0, -1),
       });
 
@@ -328,14 +344,17 @@ export default function ForgePage() {
                   </div>
                   <div className="flex-[2]">
                     <label className="block text-xs font-medium text-[var(--color-text-muted)]">
-                      {currentProvider === "anthropic" ? "Anthropic" : "OpenAI"} API Key
+                      {isLocal ? "Local server" : currentProvider === "anthropic" ? "Anthropic" : "OpenAI"} API Key
                     </label>
                     <input
                       type="password"
+                      disabled={isLocal}
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
                       placeholder={
-                        currentProvider === "anthropic" ? "sk-ant-api03-..." : "sk-..."
+                        isLocal
+                          ? "Not needed: uses the server set in Settings"
+                          : currentProvider === "anthropic" ? "sk-ant-api03-..." : "sk-..."
                       }
                       className={cn(
                         "mt-1 w-full rounded border border-[var(--color-border)]",
@@ -347,9 +366,14 @@ export default function ForgePage() {
                   </div>
                 </div>
                 <p className="mt-1.5 text-[10px] text-[var(--color-text-muted)]">
-                  Sent to{" "}
-                  {currentProvider === "anthropic" ? "Anthropic" : "OpenAI"} directly.
-                  Never stored.
+                  {isLocal ? (
+                    <>Runs on your local server (change it in Settings). Nothing leaves your network.</>
+                  ) : (
+                    <>
+                      Sent to {currentProvider === "anthropic" ? "Anthropic" : "OpenAI"} directly.
+                      Never stored.
+                    </>
+                  )}
                 </p>
               </div>
             )}
@@ -500,7 +524,7 @@ export default function ForgePage() {
                     </code>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(shareCode);
+                        navigator.clipboard?.writeText(shareCode);
                         setShareCodeCopied(true);
                         setTimeout(() => setShareCodeCopied(false), 2000);
                       }}
@@ -658,7 +682,7 @@ function FileEditor({
   }, [file.language]);
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(file.content);
+    await navigator.clipboard?.writeText(file.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
