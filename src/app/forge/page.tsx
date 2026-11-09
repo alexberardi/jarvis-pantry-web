@@ -16,7 +16,8 @@ import {
   GitCompare,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { forgeGenerate, forgeCreateRepo, forgeUpsertDraft, getForgeModels, type ForgeFile, type ForgeResult, type ForgeModel, type ForgeValidation } from "@/api/pantry";
+import { forgeGenerate, forgeCreateRepo, forgeUpsertDraft, forgeGetFeedback, getForgeModels, type ForgeFile, type ForgeResult, type ForgeModel, type ForgeValidation, type ForgeReport } from "@/api/pantry";
+import { fixPrompt, reportSummary } from "@/lib/forgeReport";
 import { useAuthContext } from "@/hooks/AuthContext";
 import { FindingCard } from "@/components/FindingCard";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,8 @@ const CHANGES_TAB = "\u0000changes";
 interface Message {
   role: "user" | "assistant";
   content: string;
+  /** Shown in the chat instead of content (a test report's fix request carries the whole package). */
+  display?: string;
 }
 
 function ShareCodeTimer({ expiresAt }: { expiresAt: string }) {
@@ -102,12 +105,25 @@ export default function ForgePage() {
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [shareCodeExpiry, setShareCodeExpiry] = useState<string | null>(null);
   const [shareCodeCopied, setShareCodeCopied] = useState(false);
+  // Send to Forge reports for this session's draft, and how many have been used or dismissed
+  const [reports, setReports] = useState<ForgeReport[]>([]);
+  const [reportsHandled, setReportsHandled] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Reports arrive from the phone while the draft is being tested
+  useEffect(() => {
+    if (!shareCode) return;
+    const poll = () => forgeGetFeedback(sessionId).then(setReports).catch(() => {});
+    poll();
+    const id = setInterval(poll, 10000);
+    return () => clearInterval(id);
+  }, [shareCode, sessionId]);
+  const pendingReport = reports.length > reportsHandled ? reports[reports.length - 1] : null;
 
   const currentModel = models.find((m) => m.id === selectedModel);
   const currentProvider = currentModel?.provider || "anthropic";
@@ -122,16 +138,16 @@ export default function ForgePage() {
     );
   }, []);
 
-  async function handleSend() {
-    if (!canSend) return;
+  async function handleSend(request?: { content: string; display: string }) {
+    if (request ? !hasApiKey || loading : !canSend) return;
 
-    const userMessage = input.trim();
-    setInput("");
+    const userMessage = request ? request.content : input.trim();
+    if (!request) setInput("");
     setShowSettings(false);
 
     const newMessages: Message[] = [
       ...messages,
-      { role: "user", content: userMessage },
+      { role: "user", content: userMessage, display: request?.display },
     ];
     setMessages(newMessages);
     setLoading(true);
@@ -436,7 +452,7 @@ export default function ForgePage() {
                       )}
                     >
                       <p className="whitespace-pre-wrap text-xs leading-relaxed">
-                        {msg.content}
+                        {msg.display ?? msg.content}
                       </p>
                     </div>
                   ))}
@@ -450,6 +466,43 @@ export default function ForgePage() {
                 </div>
               )}
             </div>
+
+            {/* Send to Forge: the newest report from a test install */}
+            {pendingReport && (
+              <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-alt)] p-3">
+                <p className="text-xs font-medium text-[var(--color-text)]">
+                  Test report from your node: {reportSummary(pendingReport)}
+                </p>
+                {pendingReport.note && (
+                  <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">&ldquo;{pendingReport.note}&rdquo;</p>
+                )}
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => {
+                      setReportsHandled(reports.length);
+                      handleSend({
+                        content: fixPrompt(pendingReport, files),
+                        display: `Test report: ${reportSummary(pendingReport)}${pendingReport.note ? ` (“${pendingReport.note}”)` : ""}. Fix what went wrong.`,
+                      });
+                    }}
+                    disabled={!hasApiKey || loading}
+                    className={cn(
+                      "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                      "bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary)]/90",
+                      "disabled:cursor-not-allowed disabled:opacity-50"
+                    )}
+                  >
+                    Fix with this report
+                  </button>
+                  <button
+                    onClick={() => setReportsHandled(reports.length)}
+                    className="rounded-lg px-3 py-1.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Input */}
             <div className="border-t border-[var(--color-border)] p-3">
@@ -478,7 +531,7 @@ export default function ForgePage() {
                   style={{ minHeight: "36px", maxHeight: "100px" }}
                 />
                 <button
-                  onClick={handleSend}
+                  onClick={() => handleSend()}
                   disabled={!canSend}
                   className={cn(
                     "flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg transition-colors",
