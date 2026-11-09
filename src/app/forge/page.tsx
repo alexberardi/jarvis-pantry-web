@@ -13,12 +13,17 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
+  GitCompare,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { forgeGenerate, forgeCreateRepo, forgeUpsertDraft, getForgeModels, type ForgeFile, type ForgeResult, type ForgeModel, type ForgeValidation } from "@/api/pantry";
 import { useAuthContext } from "@/hooks/AuthContext";
 import { FindingCard } from "@/components/FindingCard";
 import { cn } from "@/lib/utils";
+import { diffLines, hunks } from "@/lib/diff";
+
+// activeFile value for the Changes tab (no generated file can have this name)
+const CHANGES_TAB = "\u0000changes";
 
 interface Message {
   role: "user" | "assistant";
@@ -77,6 +82,8 @@ export default function ForgePage() {
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(true);
   const [files, setFiles] = useState<ForgeFile[]>([]);
+  // The files as they were before the last revision, for the Changes tab
+  const [previousFiles, setPreviousFiles] = useState<ForgeFile[] | null>(null);
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [packageInfo, setPackageInfo] = useState<{ name: string; displayName: string } | null>(null);
   const [chatCollapsed, setChatCollapsed] = useState(false);
@@ -148,6 +155,12 @@ export default function ForgePage() {
         ...newMessages,
         { role: "assistant", content: result.explanation },
       ]);
+
+      // A revision: keep what it replaced and show what changed
+      if (files.length > 0 && result.files.length > 0) {
+        setPreviousFiles(files);
+        setActiveFile(CHANGES_TAB);
+      }
 
       // Update files — merge new files in, update existing
       setFiles((prev) => {
@@ -514,6 +527,20 @@ export default function ForgePage() {
                 </button>
               );
             })}
+            {previousFiles && (
+              <button
+                onClick={() => setActiveFile(CHANGES_TAB)}
+                className={cn(
+                  "flex items-center gap-1.5 border-r border-[var(--color-border)] px-4 py-2.5 text-xs transition-colors",
+                  activeFile === CHANGES_TAB
+                    ? "bg-[var(--color-surface)] text-[var(--color-text)] font-medium"
+                    : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
+                )}
+              >
+                <GitCompare className="h-3.5 w-3.5" />
+                Changes
+              </button>
+            )}
             {packageInfo && (
               <div className="ml-auto flex items-center gap-2 px-4">
                 {shareCode && (
@@ -623,11 +650,15 @@ export default function ForgePage() {
           )}
 
           {/* Editor area */}
-          {activeFile && (
-            <FileEditor
-              file={files.find((f) => f.filename === activeFile)!}
-              onEdit={handleFileEdit}
-            />
+          {activeFile === CHANGES_TAB && previousFiles ? (
+            <ChangesView before={previousFiles} after={files} />
+          ) : (
+            activeFile && files.some((f) => f.filename === activeFile) && (
+              <FileEditor
+                file={files.find((f) => f.filename === activeFile)!}
+                onEdit={handleFileEdit}
+              />
+            )
           )}
         </div>
       )}
@@ -740,6 +771,57 @@ function FileEditor({
           </pre>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Changes tab: what the last revision changed ───────────────────────
+
+function ChangesView({ before, after }: { before: ForgeFile[]; after: ForgeFile[] }) {
+  const names = [...after.map((f) => f.filename), ...before.map((f) => f.filename).filter((n) => !after.some((f) => f.filename === n))];
+  const diffs = names.map((name) => {
+    const lines = diffLines(before.find((f) => f.filename === name)?.content ?? "", after.find((f) => f.filename === name)?.content ?? "");
+    return {
+      name,
+      added: lines.filter((l) => l.kind === "add").length,
+      removed: lines.filter((l) => l.kind === "del").length,
+      hunks: hunks(lines),
+    };
+  });
+  const changed = diffs.filter((d) => d.hunks.length > 0);
+  const unchanged = diffs.filter((d) => d.hunks.length === 0).map((d) => d.name);
+
+  return (
+    <div className="flex-1 overflow-auto bg-[var(--color-surface)] p-4 font-mono text-xs">
+      {changed.length === 0 && <p className="text-[var(--color-text-muted)]">The last revision changed nothing.</p>}
+      {changed.map((d) => (
+        <div key={d.name} className="mb-6">
+          <div className="mb-1 flex items-center gap-3 text-[var(--color-text)]">
+            <span className="font-semibold">{d.name}</span>
+            <span className="text-green-600 dark:text-green-400">+{d.added}</span>
+            <span className="text-red-600 dark:text-red-400">−{d.removed}</span>
+          </div>
+          {d.hunks.map((hunk, i) => (
+            <div key={i} className="mb-2 overflow-hidden rounded border border-[var(--color-border)]">
+              {hunk.map((line, j) => (
+                <div
+                  key={j}
+                  className={cn(
+                    "whitespace-pre-wrap px-2 leading-relaxed",
+                    line.kind === "add" && "bg-green-50 text-green-800 dark:bg-green-900/25 dark:text-green-300",
+                    line.kind === "del" && "bg-red-50 text-red-800 dark:bg-red-900/25 dark:text-red-300",
+                    line.kind === "same" && "text-[var(--color-text-muted)]"
+                  )}
+                >
+                  {line.kind === "add" ? "+ " : line.kind === "del" ? "- " : "  "}
+                  {line.text}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+      {unchanged.length > 0 && <p className="text-[var(--color-text-muted)]">Unchanged: {unchanged.join(", ")}</p>}
     </div>
   );
 }
