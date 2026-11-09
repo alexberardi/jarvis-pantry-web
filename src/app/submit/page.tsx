@@ -202,7 +202,7 @@ function SubmitPageInner() {
                 "disabled:opacity-50"
               )}
             >
-              <option value="claude">Claude (Sonnet 4)</option>
+              <option value="claude">Claude (Sonnet 5.5)</option>
               <option value="openai">GPT-4o</option>
             </select>
             <p className="mt-1.5 text-xs text-[var(--color-text-muted)]">
