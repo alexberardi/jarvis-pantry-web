@@ -478,3 +478,24 @@ export async function forgeUpsertDraft(params: {
   const { data } = await pantryApi.post("/v1/forge/drafts", params);
   return data;
 }
+
+/** A Send to Forge report: what a test install of this session's draft did on a node. */
+export interface ForgeTestRun {
+  command: string;
+  arguments: unknown;
+  output: unknown;
+  at: string;
+}
+
+export interface ForgeReport {
+  install: { package_name: string; status: string; error: string | null; details: unknown };
+  runs: ForgeTestRun[];
+  note?: string | null;
+  share_code: string;
+  received_at: string;
+}
+
+export async function forgeGetFeedback(sessionId: string): Promise<ForgeReport[]> {
+  const { data } = await pantryApi.get(`/v1/forge/sessions/${encodeURIComponent(sessionId)}/feedback`);
+  return data.reports ?? [];
+}
