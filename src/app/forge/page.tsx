@@ -69,7 +69,7 @@ export default function ForgePage() {
     }).catch(() => {
       // Fallback if endpoint isn't available yet
       setModels([
-        { id: "sonnet", display_name: "Claude Sonnet 4", provider: "anthropic", estimated_cost: "~$0.108", estimated_cost_usd: 0.108 },
+        { id: "sonnet", display_name: "Claude Sonnet 5.5", provider: "anthropic", estimated_cost: "~$0.072", estimated_cost_usd: 0.072 },
       ]);
     });
   }, []);
