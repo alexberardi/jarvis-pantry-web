@@ -16,8 +16,9 @@ import {
   GitCompare,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { forgeGenerate, forgeCreateRepo, forgeUpsertDraft, forgeGetFeedback, getForgeModels, type ForgeFile, type ForgeResult, type ForgeModel, type ForgeValidation, type ForgeReport } from "@/api/pantry";
-import { fixPrompt, reportSummary } from "@/lib/forgeReport";
+import { forgeGenerate, forgeCreateRepo, forgeUpsertDraft, forgeGetFeedback, forgeGetPrompt, forgeParse, getForgeModels, type ForgeFile, type ForgeResult, type ForgeModel, type ForgeValidation, type ForgeReport } from "@/api/pantry";
+import { browserProvider, streamForgeReply, type Progress } from "@/lib/forgeModel";
+import { fixPrompt, reportSummary, withCurrentFiles } from "@/lib/forgeReport";
 import { useAuthContext } from "@/hooks/AuthContext";
 import { FindingCard } from "@/components/FindingCard";
 import { cn } from "@/lib/utils";
@@ -83,6 +84,8 @@ export default function ForgePage() {
   }, []);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  // The reply streaming in from the model, while it is written
+  const [progress, setProgress] = useState<Progress | null>(null);
   const [showSettings, setShowSettings] = useState(true);
   const [files, setFiles] = useState<ForgeFile[]>([]);
   // The files as they were before the last revision, for the Changes tab
@@ -157,43 +160,54 @@ export default function ForgePage() {
         role: m.role,
         content: m.content,
       }));
+      // A revision's reply carries only the files it changes, so the model must see the package as it
+      // is now (the chat history holds explanations only). A fix request already includes them.
+      const description = !request && files.length > 0 ? withCurrentFiles(userMessage, files) : userMessage;
+      const current = { current_files: files, package_name: packageInfo?.name ?? "", display_name: packageInfo?.displayName ?? "" };
 
-      const result = await forgeGenerate({
-        description: userMessage,
-        model: selectedModel,
-        // A local model uses the server's saved key. Never send this field's contents: it may be a hosted
-        // provider's key typed for another model.
-        llm_api_key: isLocal ? "" : apiKey.trim(),
-        conversation_history: history.slice(0, -1),
-      });
+      let result: ForgeResult;
+      const prompt = isLocal ? null : await forgeGetPrompt(selectedModel);
+      if (prompt && browserProvider(prompt)) {
+        // Hosted model: the browser calls it with the user's key and streams the reply.
+        const reply = await streamForgeReply({
+          prompt,
+          apiKey: apiKey.trim(),
+          messages: [...history.slice(0, -1), { role: "user", content: description }],
+          onProgress: setProgress,
+        });
+        result = await forgeParse({ text: reply.text, ...current });
+      } else {
+        result = await forgeGenerate({
+          description,
+          model: selectedModel,
+          // A local model uses the server's saved key. Never send this field's contents: it may be a hosted
+          // provider's key typed for another model.
+          llm_api_key: isLocal ? "" : apiKey.trim(),
+          conversation_history: history.slice(0, -1),
+          ...current,
+        });
+      }
+      const changed = result.changed ?? result.files.map((f) => f.filename);
+      const cutOff = result.complete === false
+        ? "\n\nThe reply was cut off before it finished, even after continuing it. Check the files, or ask again with a narrower change."
+        : "";
 
       setMessages([
         ...newMessages,
-        { role: "assistant", content: result.explanation },
+        { role: "assistant", content: result.explanation + cutOff },
       ]);
 
       // A revision: keep what it replaced and show what changed
-      if (files.length > 0 && result.files.length > 0) {
+      if (files.length > 0 && (changed.length > 0 || (result.deleted?.length ?? 0) > 0)) {
         setPreviousFiles(files);
         setActiveFile(CHANGES_TAB);
       }
 
-      // Update files — merge new files in, update existing
-      setFiles((prev) => {
-        const merged = [...prev];
-        for (const newFile of result.files) {
-          const idx = merged.findIndex((f) => f.filename === newFile.filename);
-          if (idx >= 0) {
-            merged[idx] = newFile;
-          } else {
-            merged.push(newFile);
-          }
-        }
-        return merged;
-      });
+      // The reply has been applied to the package already: this is the whole package now.
+      if (result.files.length > 0) setFiles(result.files);
 
       if (!activeFile && result.files.length > 0) {
-        setActiveFile(result.files[0].filename);
+        setActiveFile(changed[0] ?? result.files[0].filename);
       }
 
       setPackageInfo({
@@ -250,6 +264,7 @@ export default function ForgePage() {
       ]);
     } finally {
       setLoading(false);
+      setProgress(null);
       inputRef.current?.focus();
     }
   }
@@ -456,10 +471,17 @@ export default function ForgePage() {
                       </p>
                     </div>
                   ))}
+                  {loading && progress?.activity.map((line, i) => (
+                    <p key={`tool-${i}`} className="truncate px-3 text-[11px] text-[var(--color-text-muted)]" title={line}>
+                      {line}
+                    </p>
+                  ))}
                   {loading && (
-                    <div className="flex items-center gap-2 px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                    <div className="flex items-center gap-2 px-3 py-2 text-xs text-[var(--color-text-muted)]" role="status">
                       <Loader2 className="h-3 w-3 animate-spin" />
-                      Generating...
+                      {progress?.text
+                        ? `${progress.file ? `Writing ${progress.file}` : "Writing"} (${Math.round(progress.text.length / 1000)}k characters${progress.continuation ? `, continued ${progress.continuation}×` : ""})`
+                        : "Generating..."}
                     </div>
                   )}
                   <div ref={messagesEndRef} />

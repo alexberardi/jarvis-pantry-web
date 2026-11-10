@@ -283,8 +283,57 @@ export interface ForgeResult {
   package_name: string;
   display_name: string;
   explanation: string;
+  /** The whole package after the reply (a revision's reply carries only what it changes). */
   files: ForgeFile[];
+  /** The files the reply added or changed, and the ones it removed. */
+  changed?: string[];
+  deleted?: string[];
+  /** False when the reply was cut off before its end marker. */
+  complete?: boolean;
   validation?: ForgeValidation;
+}
+
+/** What the browser needs to call a hosted model itself: Pantry's system prompt and the model's API settings. */
+export interface ForgePrompt {
+  model: string;
+  provider: string;
+  api_type: string;
+  api_model: string;
+  max_tokens: number;
+  system: string;
+}
+
+// Only the browser uses this prompt, and it gives the model the package reading tools below.
+export async function forgeGetPrompt(model: string): Promise<ForgePrompt> {
+  const { data } = await pantryApi.get("/v1/forge/prompt", { params: { model, tools: true } });
+  return data;
+}
+
+/** The Forge model's package reading tools: published packages, their files and one file's content. */
+export async function forgeSearchPackages(q: string, type?: string): Promise<{ packages: unknown[] }> {
+  const { data } = await pantryApi.get("/v1/forge/packages", { params: { q, type } });
+  return data;
+}
+
+export async function forgeListPackageFiles(name: string): Promise<{ ref: string; files: { path: string; size: number }[]; truncated: boolean }> {
+  const { data } = await pantryApi.get(`/v1/forge/packages/${encodeURIComponent(name)}/files`);
+  return data;
+}
+
+export async function forgeReadPackageFile(name: string, path: string): Promise<{ content: string }> {
+  const { data } = await pantryApi.get(`/v1/forge/packages/${encodeURIComponent(name)}/file`, { params: { path } });
+  return data;
+}
+
+/** Applies a model's reply to the current package and validates the result (fast: no model call). */
+export async function forgeParse(params: {
+  text: string;
+  current_files: ForgeFile[];
+  package_name: string;
+  display_name: string;
+}): Promise<ForgeResult> {
+  const { data } = await pantryApi.post("/v1/forge/parse", params, { timeout: 60000 });
+  return data;
 }
 
 export interface CreateRepoResult {
@@ -449,11 +498,16 @@ export async function forgeGenerate(params: {
   model: string;
   llm_api_key: string;
   conversation_history?: { role: string; content: string }[];
+  current_files?: ForgeFile[];
+  package_name?: string;
+  display_name?: string;
 }): Promise<ForgeResult> {
   // Call Pantry backend directly — Next.js rewrite proxy can 500 on long POST requests
   const directUrl = process.env.NEXT_PUBLIC_PANTRY_API_URL || "http://localhost:7721";
+  // Longer than Pantry's own model timeouts (600s hosted, FORGE_LOCAL_TIMEOUT 900s local): a big
+  // generation can run for minutes, and giving up first throws away a result the key paid for.
   const { data } = await axios.post(`${directUrl}/v1/forge/generate`, params, {
-    timeout: 120000,
+    timeout: 16 * 60 * 1000,
   });
   return data;
 }
@@ -487,9 +541,18 @@ export interface ForgeTestRun {
   at: string;
 }
 
+/** What a test install did on the node besides chat tool calls: a log line, a device scan or a device control. */
+export interface ForgeTestEvent {
+  kind: "log" | "scan" | "control" | string;
+  at?: string;
+  [field: string]: unknown;
+}
+
 export interface ForgeReport {
   install: { package_name: string; status: string; error: string | null; details: unknown };
   runs: ForgeTestRun[];
+  /** Log lines, scans and device controls (a report from before events has none). */
+  events?: ForgeTestEvent[];
   note?: string | null;
   share_code: string;
   received_at: string;
