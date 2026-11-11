@@ -14,6 +14,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   GitCompare,
+  Download,
+  FilePlus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { forgeGenerate, forgeCreateRepo, forgeUpsertDraft, forgeGetFeedback, forgeGetPrompt, forgeParse, getForgeModels, type ForgeFile, type ForgeResult, type ForgeModel, type ForgeValidation, type ForgeReport } from "@/api/pantry";
@@ -23,9 +25,23 @@ import { useAuthContext } from "@/hooks/AuthContext";
 import { FindingCard } from "@/components/FindingCard";
 import { cn } from "@/lib/utils";
 import { diffLines, hunks } from "@/lib/diff";
+import { zipFiles } from "@/lib/zip";
 
 // activeFile value for the Changes tab (no generated file can have this name)
 const CHANGES_TAB = "\u0000changes";
+
+// The chat and package survive a page refresh (never the API key). One package per browser.
+const STORAGE_KEY = "forge-session";
+
+function newSessionId(): string {
+  // crypto.randomUUID exists only in secure contexts (HTTPS or localhost); a LAN address is plain HTTP.
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+      });
+}
 
 interface Message {
   role: "user" | "assistant";
@@ -96,15 +112,7 @@ export default function ForgePage() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState("");
   const [validation, setValidation] = useState<ForgeValidation | null>(null);
-  const [sessionId] = useState(() =>
-    // crypto.randomUUID exists only in secure contexts (HTTPS or localhost); a LAN address is plain HTTP.
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-          const r = (Math.random() * 16) | 0;
-          return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-        })
-  );
+  const [sessionId, setSessionId] = useState(newSessionId);
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [shareCodeExpiry, setShareCodeExpiry] = useState<string | null>(null);
   const [shareCodeCopied, setShareCodeCopied] = useState(false);
@@ -113,6 +121,74 @@ export default function ForgePage() {
   const [reportsHandled, setReportsHandled] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Set once the saved session is loaded, so the first save can't overwrite it with the empty state
+  const [restored, setRestored] = useState(false);
+
+  // Restored after mount: the server render has no localStorage.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+      if (saved?.sessionId) {
+        setSessionId(saved.sessionId);
+        setMessages(saved.messages ?? []);
+        setFiles(saved.files ?? []);
+        setPreviousFiles(saved.previousFiles ?? null);
+        setActiveFile(saved.activeFile ?? null);
+        setPackageInfo(saved.packageInfo ?? null);
+        setValidation(saved.validation ?? null);
+        setReportsHandled(saved.reportsHandled ?? 0);
+        // An expired share code is gone from Pantry; the next revision makes a new one.
+        if (saved.shareCode && new Date(saved.shareCodeExpiry).getTime() > Date.now()) {
+          setShareCode(saved.shareCode);
+          setShareCodeExpiry(saved.shareCodeExpiry);
+        }
+        if (saved.messages?.length) setShowSettings(false);
+      }
+    } catch {
+      // Unreadable or blocked storage: start a new package.
+    }
+    setRestored(true);
+  }, []);
+
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        sessionId, messages, files, previousFiles, activeFile, packageInfo, validation, reportsHandled, shareCode, shareCodeExpiry,
+      }));
+    } catch {
+      // Full or blocked storage: the session just won't survive a refresh.
+    }
+  }, [restored, sessionId, messages, files, previousFiles, activeFile, packageInfo, validation, reportsHandled, shareCode, shareCodeExpiry]);
+
+  function handleNewPackage() {
+    if (messages.length > 0 && !window.confirm("Start a new package? This chat and its files are cleared.")) return;
+    setSessionId(newSessionId());
+    setMessages([]);
+    setFiles([]);
+    setPreviousFiles(null);
+    setActiveFile(null);
+    setPackageInfo(null);
+    setValidation(null);
+    setReports([]);
+    setReportsHandled(0);
+    setShareCode(null);
+    setShareCodeExpiry(null);
+    setPublishError("");
+    setShowSettings(true);
+  }
+
+  function handleDownload() {
+    if (!packageInfo || files.length === 0) return;
+    const url = URL.createObjectURL(
+      zipFiles(files.map((f) => ({ filename: `${packageInfo.name}/${f.filename}`, content: f.content })))
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${packageInfo.name}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -339,6 +415,16 @@ export default function ForgePage() {
                 )}
               </div>
               <div className="flex items-center gap-1">
+                {messages.length > 0 && (
+                  <button
+                    onClick={handleNewPackage}
+                    disabled={loading}
+                    className="rounded-md p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-alt)] transition-colors disabled:opacity-50"
+                    title="New package"
+                  >
+                    <FilePlus className="h-3.5 w-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={() => setShowSettings(!showSettings)}
                   className={cn(
@@ -419,6 +505,90 @@ export default function ForgePage() {
                     </>
                   )}
                 </p>
+              </div>
+            )}
+
+            {/* The package: test code, download and publish (docked here: the tab bar overflows) */}
+            {packageInfo && hasFiles && (
+              <div className="space-y-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5">
+                {shareCode && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-[var(--color-text-muted)]">Test on a node:</span>
+                    <code className="rounded bg-[var(--color-surface-alt)] px-2 py-0.5 text-sm font-mono font-bold tracking-widest">
+                      {shareCode}
+                    </code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard?.writeText(shareCode);
+                        setShareCodeCopied(true);
+                        setTimeout(() => setShareCodeCopied(false), 2000);
+                      }}
+                      className="p-0.5 rounded hover:bg-[var(--color-surface-alt)] transition-colors"
+                      title="Copy share code"
+                    >
+                      {shareCodeCopied ? (
+                        <Check className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <Copy className="h-3 w-3 text-[var(--color-text-muted)]" />
+                      )}
+                    </button>
+                    {shareCodeExpiry && (
+                      <ShareCodeTimer expiresAt={shareCodeExpiry} />
+                    )}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="mr-auto truncate text-xs font-medium text-[var(--color-text)]">
+                    {packageInfo.displayName}
+                  </span>
+                  <button
+                    onClick={handleDownload}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                      "border border-[var(--color-border)] text-[var(--color-text-muted)]",
+                      "hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text)]"
+                    )}
+                    title="Download the package as a zip"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download zip
+                  </button>
+                  {user ? (
+                    <button
+                      onClick={handlePublish}
+                      disabled={publishing}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                        "bg-[var(--color-secondary)] text-white",
+                        "hover:bg-[var(--color-secondary)]/90",
+                        "disabled:cursor-not-allowed disabled:opacity-50"
+                      )}
+                    >
+                      {publishing ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-3 w-3" />
+                          Publish
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={login}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                        "border border-[var(--color-border)] text-[var(--color-text-muted)]",
+                        "hover:bg-[var(--color-surface-alt)]"
+                      )}
+                    >
+                      Sign in to publish
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -578,7 +748,7 @@ export default function ForgePage() {
       {hasFiles && (
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* File tabs */}
-          <div className="flex items-center gap-0 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)]">
+          <div className="flex items-center gap-0 overflow-x-auto border-b border-[var(--color-border)] bg-[var(--color-surface-alt)]">
             {files.map((file) => {
               const Icon =
                 file.language === "python"
@@ -591,7 +761,7 @@ export default function ForgePage() {
                   key={file.filename}
                   onClick={() => setActiveFile(file.filename)}
                   className={cn(
-                    "flex items-center gap-1.5 border-r border-[var(--color-border)] px-4 py-2.5 text-xs transition-colors",
+                    "flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap border-r border-[var(--color-border)] px-4 py-2.5 text-xs transition-colors",
                     activeFile === file.filename
                       ? "bg-[var(--color-surface)] text-[var(--color-text)] font-medium"
                       : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
@@ -606,7 +776,7 @@ export default function ForgePage() {
               <button
                 onClick={() => setActiveFile(CHANGES_TAB)}
                 className={cn(
-                  "flex items-center gap-1.5 border-r border-[var(--color-border)] px-4 py-2.5 text-xs transition-colors",
+                  "flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap border-r border-[var(--color-border)] px-4 py-2.5 text-xs transition-colors",
                   activeFile === CHANGES_TAB
                     ? "bg-[var(--color-surface)] text-[var(--color-text)] font-medium"
                     : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"
@@ -615,74 +785,6 @@ export default function ForgePage() {
                 <GitCompare className="h-3.5 w-3.5" />
                 Changes
               </button>
-            )}
-            {packageInfo && (
-              <div className="ml-auto flex items-center gap-2 px-4">
-                {shareCode && (
-                  <div className="flex items-center gap-1.5 mr-3">
-                    <span className="text-[10px] text-[var(--color-text-muted)]">Test:</span>
-                    <code className="rounded bg-[var(--color-surface-alt)] px-2 py-0.5 text-sm font-mono font-bold tracking-widest">
-                      {shareCode}
-                    </code>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard?.writeText(shareCode);
-                        setShareCodeCopied(true);
-                        setTimeout(() => setShareCodeCopied(false), 2000);
-                      }}
-                      className="p-0.5 rounded hover:bg-[var(--color-surface-alt)] transition-colors"
-                      title="Copy share code"
-                    >
-                      {shareCodeCopied ? (
-                        <Check className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <Copy className="h-3 w-3 text-[var(--color-text-muted)]" />
-                      )}
-                    </button>
-                    {shareCodeExpiry && (
-                      <ShareCodeTimer expiresAt={shareCodeExpiry} />
-                    )}
-                  </div>
-                )}
-                <span className="text-xs font-medium text-[var(--color-text)]">
-                  {packageInfo.displayName}
-                </span>
-                {user ? (
-                  <button
-                    onClick={handlePublish}
-                    disabled={publishing}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-                      "bg-[var(--color-secondary)] text-white",
-                      "hover:bg-[var(--color-secondary)]/90",
-                      "disabled:cursor-not-allowed disabled:opacity-50"
-                    )}
-                  >
-                    {publishing ? (
-                      <>
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-3 w-3" />
-                        Publish
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <button
-                    onClick={login}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-                      "border border-[var(--color-border)] text-[var(--color-text-muted)]",
-                      "hover:bg-[var(--color-surface-alt)]"
-                    )}
-                  >
-                    Sign in to publish
-                  </button>
-                )}
-              </div>
             )}
           </div>
 
