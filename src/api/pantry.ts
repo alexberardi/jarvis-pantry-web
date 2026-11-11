@@ -310,7 +310,15 @@ export async function forgeGetPrompt(model: string): Promise<ForgePrompt> {
 }
 
 /** The Forge model's package reading tools: published packages, their files and one file's content. */
-export async function forgeSearchPackages(q: string, type?: string): Promise<{ packages: unknown[] }> {
+export interface ForgePackageSummary {
+  name: string;
+  display_name: string | null;
+  description: string | null;
+  package_type: string;
+  latest_version: string | null;
+}
+
+export async function forgeSearchPackages(q: string, type?: string): Promise<{ packages: ForgePackageSummary[] }> {
   const { data } = await pantryApi.get("/v1/forge/packages", { params: { q, type } });
   return data;
 }

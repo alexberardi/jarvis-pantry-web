@@ -75,6 +75,7 @@ The Forge is a split-pane IDE for AI-powered package generation:
 - **AST validation**: Static analysis runs on generated code before publish (green/yellow/red status)
 - **One-click publish**: Creates GitHub repo → pushes files → redirects to Submit page
 - **Download zip**: the package as `<name>.zip` (`src/lib/zip.ts`), for offline installs where Publish can't reach GitHub
+- **@ mentions**: `@` in the chat autocompletes Pantry packages; a picked one is named exactly to the model (hosted models read it with the package tools, local models get its files inlined, `src/lib/forgeReferences.ts`)
 - **Survives a refresh**: chat, files and share code persist in localStorage (`forge-session`, never the API key); the New package button clears them
 
 The Forge system prompt is auto-generated from SDK source code via `jarvis_command_sdk.forge.generate_spec_markdown()`. It never goes stale.
