@@ -18,7 +18,7 @@ import {
   FilePlus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { forgeGenerate, forgeCreateRepo, forgeUpsertDraft, forgeGetFeedback, forgeGetPrompt, forgeParse, getForgeModels, type ForgeFile, type ForgeResult, type ForgeModel, type ForgeValidation, type ForgeReport } from "@/api/pantry";
+import { forgeGenerate, forgeCreateRepo, forgeUpsertDraft, forgeGetFeedback, forgeGetPrompt, forgeParse, forgeSearchPackages, getForgeModels, type ForgeFile, type ForgeResult, type ForgeModel, type ForgeValidation, type ForgeReport, type ForgePackageSummary } from "@/api/pantry";
 import { browserProvider, streamForgeReply, type Progress } from "@/lib/forgeModel";
 import { fixPrompt, reportSummary, withCurrentFiles } from "@/lib/forgeReport";
 import { useAuthContext } from "@/hooks/AuthContext";
@@ -26,6 +26,7 @@ import { FindingCard } from "@/components/FindingCard";
 import { cn } from "@/lib/utils";
 import { diffLines, hunks } from "@/lib/diff";
 import { zipFiles } from "@/lib/zip";
+import { mentionQuery, referencesIn, withReferenceFiles, withReferences, type PackageReference } from "@/lib/forgeReferences";
 
 // activeFile value for the Changes tab (no generated file can have this name)
 const CHANGES_TAB = "\u0000changes";
@@ -123,6 +124,50 @@ export default function ForgePage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Set once the saved session is loaded, so the first save can't overwrite it with the empty state
   const [restored, setRestored] = useState(false);
+  // @ mentions: the packages picked for this message, and the autocomplete for the @word being typed
+  const [mentions, setMentions] = useState<PackageReference[]>([]);
+  const [mentionText, setMentionText] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<ForgePackageSummary[]>([]);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+
+  useEffect(() => {
+    if (mentionText === null) return;
+    let stale = false;
+    const id = setTimeout(() => {
+      forgeSearchPackages(mentionText)
+        .then(({ packages }) => {
+          if (stale) return;
+          setSuggestions(packages.slice(0, 8));
+          setSuggestionIndex(0);
+        })
+        .catch(() => !stale && setSuggestions([]));
+    }, 150);
+    return () => {
+      stale = true;
+      clearTimeout(id);
+    };
+  }, [mentionText]);
+
+  function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setInput(e.target.value);
+    const q = mentionQuery(e.target.value.slice(0, e.target.selectionStart));
+    setMentionText(q);
+    if (q === null) setSuggestions([]);
+  }
+
+  function pickMention(pkg: ForgePackageSummary) {
+    const el = inputRef.current;
+    const caret = el?.selectionStart ?? input.length;
+    const before = input.slice(0, caret).replace(/@[\w-]*$/, `@${pkg.display_name || pkg.name} `);
+    setInput(before + input.slice(caret));
+    setMentions((prev) => [...prev, { name: pkg.name, display_name: pkg.display_name }]);
+    setMentionText(null);
+    setSuggestions([]);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(before.length, before.length);
+    });
+  }
 
   // Restored after mount: the server render has no localStorage.
   useEffect(() => {
@@ -220,13 +265,21 @@ export default function ForgePage() {
   async function handleSend(request?: { content: string; display: string }) {
     if (request ? !hasApiKey || loading : !canSend) return;
 
-    const userMessage = request ? request.content : input.trim();
-    if (!request) setInput("");
+    const typed = input.trim();
+    const refs = request ? [] : referencesIn(typed, mentions);
+    // The model gets the exact package names; the chat shows what was typed.
+    const userMessage = request ? request.content : withReferences(typed, refs);
+    if (!request) {
+      setInput("");
+      setMentions([]);
+      setSuggestions([]);
+      setMentionText(null);
+    }
     setShowSettings(false);
 
     const newMessages: Message[] = [
       ...messages,
-      { role: "user", content: userMessage, display: request?.display },
+      { role: "user", content: userMessage, display: request?.display ?? (refs.length ? typed : undefined) },
     ];
     setMessages(newMessages);
     setLoading(true);
@@ -238,7 +291,9 @@ export default function ForgePage() {
       }));
       // A revision's reply carries only the files it changes, so the model must see the package as it
       // is now (the chat history holds explanations only). A fix request already includes them.
-      const description = !request && files.length > 0 ? withCurrentFiles(userMessage, files) : userMessage;
+      let description = !request && files.length > 0 ? withCurrentFiles(userMessage, files) : userMessage;
+      // A local model has no package tools: send the referenced packages' files with this request only.
+      if (isLocal && refs.length > 0) description = await withReferenceFiles(description, refs);
       const current = { current_files: files, package_name: packageInfo?.name ?? "", display_name: packageInfo?.displayName ?? "" };
 
       let result: ForgeResult;
@@ -346,6 +401,25 @@ export default function ForgePage() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
+    if (suggestions.length > 0) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        setSuggestionIndex((i) => (i + step + suggestions.length) % suggestions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        pickMention(suggestions[suggestionIndex]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSuggestions([]);
+        setMentionText(null);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -697,18 +771,51 @@ export default function ForgePage() {
             )}
 
             {/* Input */}
-            <div className="border-t border-[var(--color-border)] p-3">
+            <div className="relative border-t border-[var(--color-border)] p-3">
+              {suggestions.length > 0 && (
+                <ul
+                  role="listbox"
+                  aria-label="Pantry packages"
+                  className="absolute bottom-full left-3 right-3 mb-1 max-h-64 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-lg"
+                >
+                  {suggestions.map((pkg, i) => (
+                    <li
+                      key={pkg.name}
+                      role="option"
+                      aria-selected={i === suggestionIndex}
+                      // mousedown, not click: the textarea keeps focus and its caret
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        pickMention(pkg);
+                      }}
+                      onMouseEnter={() => setSuggestionIndex(i)}
+                      className={cn(
+                        "cursor-pointer px-3 py-1.5",
+                        i === suggestionIndex && "bg-[var(--color-surface-alt)]"
+                      )}
+                    >
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs font-medium text-[var(--color-text)]">{pkg.display_name || pkg.name}</span>
+                        <code className="truncate text-[10px] text-[var(--color-text-muted)]">{pkg.name}</code>
+                      </div>
+                      {pkg.description && (
+                        <p className="truncate text-[11px] text-[var(--color-text-muted)]">{pkg.description}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
               <div className="flex items-end gap-2">
                 <textarea
                   ref={inputRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
                   placeholder={
                     hasApiKey
                       ? hasFiles
-                        ? "Ask for changes..."
-                        : "Describe what your command should do..."
+                        ? "Ask for changes... (@ to reference a Pantry package)"
+                        : "Describe what your command should do... (@ to reference a Pantry package)"
                       : "Enter API key first"
                   }
                   disabled={!hasApiKey || loading}

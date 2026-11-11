@@ -38,6 +38,9 @@ export default function SettingsPage() {
   const [adminKey, setAdminKey] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
+  // A Jarvis server (jarvisd's LLM) takes an app client's ID and key, and serves its background and live models.
+  const [isJarvis, setIsJarvis] = useState(false);
+  const [appId, setAppId] = useState("");
   const [detecting, setDetecting] = useState(false);
   const [savingNow, setSavingNow] = useState(false);
   const [status, setStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -62,6 +65,8 @@ export default function SettingsPage() {
         setSaved(s);
         if (s.base_url) setBaseUrl(s.base_url);
         setDefaultModel(s.default_model);
+        setIsJarvis(!!s.jarvis_app_id);
+        setAppId(s.jarvis_app_id ?? "");
         // Detecting needs the admin key: only do it on load when one is already stored for this session.
         if (s.base_url && getStoredAdminKey()) void detect(s.base_url, undefined, s.default_model);
       })
@@ -82,7 +87,7 @@ export default function SettingsPage() {
     // this, typing the key and pressing Detect models sent no key and the Pantry answered 401.
     if (adminKey.trim()) storeAdminKey(adminKey.trim());
     try {
-      const result = await detectLocalLlmModels({ base_url: url, api_key: key });
+      const result = await detectLocalLlmModels({ base_url: url, api_key: key, jarvis_app_id: isJarvis ? appId.trim() : "" });
       if (!result.ok) {
         setModels([]);
         setStatus({ kind: "error", text: result.error || "Could not list models" });
@@ -113,6 +118,7 @@ export default function SettingsPage() {
         // undefined keeps the stored key; "" clears it
         api_key: clearKey ? "" : apiKey.trim() ? apiKey.trim() : undefined,
         default_model: defaultModel,
+        jarvis_app_id: isJarvis ? appId.trim() : "",
       });
       setSaved(result);
       setApiKey("");
@@ -170,8 +176,31 @@ export default function SettingsPage() {
         </div>
 
         <div>
+          <label className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text)]">
+            <input type="checkbox" checked={isJarvis} onChange={(e) => setIsJarvis(e.target.checked)} />
+            This is my Jarvis server
+          </label>
+          <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+            Use the LLM that runs your Jarvis: its address is <code>http://&lt;jarvis&gt;:7700/llm</code>. Add an app
+            client in Jarvis for the Pantry and enter its ID and key below. The Forge uses Jarvis&apos;s background
+            model at background priority, so it never holds up voice.
+          </p>
+          {isJarvis && (
+            <input
+              value={appId}
+              onChange={(e) => setAppId(e.target.value)}
+              placeholder="Jarvis app ID"
+              aria-label="Jarvis app ID"
+              className={inputClass}
+              autoComplete="off"
+            />
+          )}
+        </div>
+
+        <div>
           <label className="block text-xs font-medium text-[var(--color-text-muted)]">
-            API key {saved?.has_api_key && !clearKey && <span>(one is saved; leave blank to keep it)</span>}
+            {isJarvis ? "App key" : "API key"}{" "}
+            {saved?.has_api_key && !clearKey && <span>(one is saved; leave blank to keep it)</span>}
           </label>
           <input
             type="password"
