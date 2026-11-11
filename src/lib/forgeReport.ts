@@ -27,7 +27,7 @@ export function fixPrompt(r: ForgeReport, files: ForgeFile[]): string {
   const report = { install: r.install, runs: r.runs, events: r.events ?? [], note: r.note ?? null };
   return withCurrentFiles(
     [
-      "I test-installed this package on my Jarvis node. Here is what happened: the install result, every run of its commands (the arguments Jarvis passed and what the command returned), and its events on the node (its own log lines, device scans with what they found, and device controls with their results).",
+      "I test-installed this package on my Jarvis node. Here is what happened: the install result, every run of its commands (the arguments Jarvis passed and what the command returned), and its events on the node (its own log lines, each background agent run with how long it took, the alerts it raised or its traceback, device scans with what they found, and device controls with their results).",
       r.note ? `My note: ${r.note}` : "",
       "```json\n" + JSON.stringify(report, null, 2) + "\n```",
       "Find the cause of anything that went wrong and fix it.",
