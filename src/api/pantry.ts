@@ -377,6 +377,8 @@ export interface LocalLlmSettings {
   base_url: string;
   has_api_key: boolean;
   default_model: string;
+  /** Set: the server is Jarvis (jarvisd's LLM) and the key is this app client's. Only shown with the admin key. */
+  jarvis_app_id: string;
   source: "database" | "environment" | "none";
 }
 
@@ -480,6 +482,7 @@ export async function saveLocalLlmSettings(params: {
   base_url: string;
   api_key?: string | null; // omit or null keeps the stored key, "" clears it
   default_model?: string | null;
+  jarvis_app_id?: string | null; // "": not a Jarvis server
 }): Promise<LocalLlmSettings> {
   const { data } = await pantryApi.put("/v1/forge/local-llm", params, { headers: adminHeaders() });
   return data;
@@ -488,6 +491,7 @@ export async function saveLocalLlmSettings(params: {
 export async function detectLocalLlmModels(params: {
   base_url?: string;
   api_key?: string;
+  jarvis_app_id?: string;
 }): Promise<LocalLlmDetectResult> {
   const { data } = await pantryApi.post("/v1/forge/local-llm/detect", params, {
     headers: adminHeaders(),
