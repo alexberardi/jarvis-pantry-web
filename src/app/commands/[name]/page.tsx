@@ -10,6 +10,7 @@ import {
   Download,
   ExternalLink,
   Package,
+  Plug,
   RefreshCw,
   Shield,
   ShieldCheck,
@@ -237,6 +238,7 @@ export default function CommandDetailPage({
               const icons: Record<string, typeof Terminal> = {
                 command: Terminal,
                 agent: Bot,
+                daemon: Plug,
                 device_protocol: Wifi,
                 device_manager: Cpu,
               };
@@ -244,6 +246,7 @@ export default function CommandDetailPage({
               const labels: Record<string, string> = {
                 command: "Command",
                 agent: "Agent",
+                daemon: "Daemon",
                 device_protocol: "Device Protocol",
                 device_manager: "Device Manager",
               };

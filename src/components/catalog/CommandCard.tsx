@@ -8,6 +8,7 @@ import type { CommandSummary, PackageComponent } from "@/api/pantry";
 const COMPONENT_TYPE_LABELS: Record<string, string> = {
   command: "Command",
   agent: "Agent",
+  daemon: "Daemon",
   device_protocol: "Protocol",
   device_manager: "Manager",
 };
