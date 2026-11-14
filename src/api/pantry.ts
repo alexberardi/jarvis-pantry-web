@@ -10,7 +10,7 @@ export const pantryApi = axios.create({
 // ── Types ──────────────────────────────────────────────────────────────
 
 export interface PackageComponent {
-  type: "command" | "agent" | "device_protocol" | "device_manager";
+  type: "command" | "agent" | "daemon" | "device_protocol" | "device_manager";
   name: string;
   path?: string;
   description?: string;

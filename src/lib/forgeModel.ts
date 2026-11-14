@@ -59,7 +59,7 @@ const TOOLS = [
         query: { type: "string", description: "Words to match, e.g. 'zwave' or 'weather'. Empty lists the most installed." },
         type: {
           type: "string",
-          enum: ["command", "agent", "device_protocol", "device_manager", "bundle"],
+          enum: ["command", "agent", "daemon", "device_protocol", "device_manager", "bundle"],
           description: "Only packages holding a component of this type.",
         },
       },
